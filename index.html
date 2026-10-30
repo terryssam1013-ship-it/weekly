@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>TERRY'S WEEKLY TEST</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div id="app"></div>
+
+<script src="config.js"></script>
+<script>
+/* ---------- state ---------- */
+const S = {
+  setId: null, set: null, name: '', resultId: null,
+  secIdx: 0, answers: {},   // answers[secId] = array
+  results: {},              // results[secId] = {score,total,detail}
+  startedAt: null
+};
+const $ = s => document.querySelector(s);
+const app = $('#app');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const CIRC = ['①','②','③','④','⑤'];
+const LS = 'weekly_progress_';
+
+/* ---------- firebase REST ---------- */
+const fb = {
+  url: p => `${CONFIG.dbUrl}/weekly/${p}.json`,
+  get: p => fetch(fb.url(p)).then(r => r.json()),
+  put: (p, v) => fetch(fb.url(p), {method:'PUT', body: JSON.stringify(v)}).then(r => r.json()),
+  patch: (p, v) => fetch(fb.url(p), {method:'PATCH', body: JSON.stringify(v)}).then(r => r.json())
+};
+
+/* ---------- helpers ---------- */
+function norm(s){
+  return String(s||'').trim().toLowerCase().replace(/[’‘`]/g,"'").replace(/[.,!?;:"]/g,'').replace(/\s+/g,' ');
+}
+function saveProgress(){
+  try{ localStorage.setItem(LS+S.setId, JSON.stringify({name:S.name,resultId:S.resultId,secIdx:S.secIdx,answers:S.answers,results:S.results,startedAt:S.startedAt})); }catch(e){}
+}
+function loadProgress(){
+  try{ return JSON.parse(localStorage.getItem(LS+S.setId)||'null'); }catch(e){ return null; }
+}
+function clearProgress(){ try{ localStorage.removeItem(LS+S.setId); }catch(e){} }
+function now(){ return new Date().toISOString(); }
+function fmtTime(iso){ const d=new Date(iso); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function sections(){ return S.set.sections; }
+function totalMax(){ return sections().reduce((a,s)=>a+secMax(s),0); }
+function secMax(s){ return s.type==='mc' ? s.questions.length : s.parts.reduce((a,p)=>a+p.lines.reduce((b,l)=>b+(l.t.match(/\{\{/g)||[]).length,0),0); }
+
+/* ---------- screens ---------- */
+function render(html){ app.innerHTML = html; window.scrollTo(0,0); }
+
+async function boot(){
+  const u = new URL(location.href);
+  S.setId = u.searchParams.get('s');
+  if(!S.setId){ return showSetList(); }
+  render(`<div class="center"><div class="spinner"></div><p>문제 불러오는 중…</p></div>`);
+  try{
+    S.set = await fb.get(`sets/${S.setId}`);
+  }catch(e){ S.set=null; }
+  if(!S.set){ return render(`<div class="center"><h2>세트를 찾을 수 없어요</h2><p>선생님께 링크를 다시 받아주세요.</p><a class="btn ghost" href="./">세트 목록</a></div>`); }
+  const p = loadProgress();
+  if(p && p.name && p.secIdx < sections().length){
+    S.name=p.name; S.resultId=p.resultId; S.secIdx=p.secIdx; S.answers=p.answers||{}; S.results=p.results||{}; S.startedAt=p.startedAt;
+    return render(`<div class="center card">
+      <h2>이어서 풀기</h2>
+      <p><b>${esc(S.name)}</b> 님, ${S.secIdx+1}번째 섹션(${esc(sections()[S.secIdx].name)})부터 이어서 풀 수 있어요.</p>
+      <button class="btn" onclick="showSection()">이어서 풀기</button>
+      <button class="btn ghost" onclick="clearProgress();S.answers={};S.results={};S.secIdx=0;showStart()">처음부터 다시</button>
+    </div>`);
+  }
+  showStart();
+}
+
+async function showSetList(){
+  render(`<div class="center"><div class="spinner"></div></div>`);
+  let meta = {};
+  try{ meta = await fb.get('setsMeta') || {}; }catch(e){}
+  const items = Object.entries(meta).filter(([k,v])=>v && v.active!==false).sort((a,b)=>(b[1].createdAt||'').localeCompare(a[1].createdAt||''));
+  render(`<header class="top"><div class="brand">TERRY'S <span>WEEKLY</span></div></header>
+  <main class="wrap">
+    <h2 class="h">테스트 선택</h2>
+    ${items.length? items.map(([id,m])=>`<a class="setcard" href="?s=${encodeURIComponent(id)}"><div class="t">${esc(m.title||id)}</div><div class="st">${esc(m.subtitle||'')}</div></a>`).join('') : '<p class="muted">등록된 테스트가 없어요.</p>'}
+  </main>`);
+}
+
+function showStart(){
+  const set=S.set;
+  render(`<header class="top"><div class="brand">TERRY'S <span>WEEKLY</span></div></header>
+  <main class="wrap">
+    <div class="card">
+      <div class="tag">${esc(set.title)}</div>
+      <h1 class="title">${esc(set.subtitle||'')}</h1>
+      <ul class="seclist">${sections().map((s,i)=>`<li><span class="num">${i+1}</span>${esc(s.name)}<span class="cnt">${secMax(s)}${s.type==='mc'?'문항':'칸'}</span></li>`).join('')}</ul>
+      <label class="lbl">이름</label>
+      <input id="nm" class="inp" type="text" placeholder="이름을 입력하세요" autocomplete="off" value="${esc(S.name)}">
+      <button class="btn big" onclick="start()">시작하기</button>
+      <p class="muted small">섹션마다 제출하면 바로 채점돼요. 중간에 나가도 같은 폰에서 이어서 풀 수 있어요.</p>
+    </div>
+  </main>`);
+  $('#nm').addEventListener('keydown',e=>{ if(e.key==='Enter') start(); });
+}
+
+async function start(){
+  const nm = $('#nm').value.trim();
+  if(!nm){ $('#nm').focus(); $('#nm').classList.add('err'); return; }
+  S.name = nm; S.secIdx=0; S.answers={}; S.results={}; S.startedAt=now();
+  S.resultId = `${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+  saveProgress();
+  fb.put(`results/${S.setId}/${S.resultId}`, {name:S.name, startedAt:S.startedAt, setTitle:S.set.title, total:0, totalMax: totalMax(), done:false}).catch(()=>{});
+  showSection();
+}
+
+function progressBar(){
+  const n=sections().length;
+  return `<div class="prog">${sections().map((s,i)=>`<div class="seg ${i<S.secIdx?'done':i===S.secIdx?'cur':''}"></div>`).join('')}</div>`;
+}
+
+function showSection(){
+  const sec = sections()[S.secIdx];
+  const head = `<header class="top sticky"><div class="brand sm">TERRY'S <span>WEEKLY</span></div><div class="who">${esc(S.name)}</div></header>
+  <div class="wrap">${progressBar()}<div class="sechead"><span class="num">${S.secIdx+1}</span><h2>${esc(sec.name)}</h2><span class="cnt">${secMax(sec)}${sec.type==='mc'?'문항':'칸'}</span></div>`;
+  let body='';
+  if(sec.type==='mc'){
+    const saved = S.answers[sec.id] || [];
+    body = sec.questions.map((q,i)=>`
+      <div class="q" id="q${i}">
+        <div class="qn">${String(i+1).padStart(2,'0')}</div>
+        <div class="qbody">
+          <div class="qt">${q.q}</div>
+          ${q.passage?`<div class="passage">${q.passage}</div>`:''}
+          <div class="choices">${q.choices.map((c,j)=>`<label class="ch ${saved[i]===j?'on':''}"><input type="radio" name="q${i}" value="${j}" ${saved[i]===j?'checked':''} onchange="pick(${i},${j})"><span class="c">${CIRC[j]}</span><span class="ct">${c}</span></label>`).join('')}</div>
+        </div>
+      </div>`).join('');
+  } else {
+    body = `<p class="intro">${esc(sec.intro||'')}</p>` + renderCloze(sec);
+  }
+  render(head + body + `<div class="submitbar"><button class="btn big" onclick="submitSection()">제출하고 채점하기</button></div></div>`);
+}
+
+function pick(i,j){
+  const sec=sections()[S.secIdx];
+  S.answers[sec.id] = S.answers[sec.id] || [];
+  S.answers[sec.id][i]=j;
+  document.querySelectorAll(`#q${i} .ch`).forEach((el,k)=>el.classList.toggle('on',k===j));
+  saveProgress();
+}
+
+let clozeIdx=0;
+function renderCloze(sec){
+  clozeIdx=0;
+  const saved = S.answers[sec.id] || [];
+  return sec.parts.map(p=>`<div class="part"><h3>${esc(p.title)}</h3>${p.lines.map(l=>{
+    const html = l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{
+      const k=clozeIdx++; const first=ans.split('|')[0];
+      return `<input class="blank" data-k="${k}" style="width:${Math.max(4,first.length*0.75+1.5)}ch" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(saved[k]||'')}" oninput="typed(${k},this.value)">`;
+    });
+    return `<div class="line">${l.s?`<span class="sp">${esc(l.s)}</span>`:l.n?`<span class="sp n">${String(l.n).padStart(2,'0')}</span>`:''}<span class="lt">${html}</span></div>`;
+  }).join('')}</div>`).join('');
+}
+function typed(k,v){
+  const sec=sections()[S.secIdx];
+  S.answers[sec.id]=S.answers[sec.id]||[];
+  S.answers[sec.id][k]=v;
+  saveProgress();
+}
+
+function gradeMC(sec){
+  const a=S.answers[sec.id]||[]; let score=0;
+  const detail = sec.questions.map((q,i)=>{ const ok=a[i]===q.answer; if(ok)score++; return {a: a[i]??null, ok, c:q.answer}; });
+  return {score,total:sec.questions.length,detail};
+}
+function gradeCloze(sec){
+  const a=S.answers[sec.id]||[]; let k=0,score=0; const detail=[];
+  sec.parts.forEach(p=>p.lines.forEach(l=>{
+    l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{
+      const alts=ans.split('|').map(norm); const given=a[k]||''; const ok=alts.includes(norm(given));
+      if(ok)score++; detail.push({a:given,ok,c:ans.split('|')[0]}); k++; return m;
+    });
+  }));
+  return {score,total:k,detail};
+}
+
+async function submitSection(){
+  const sec=sections()[S.secIdx];
+  const a=S.answers[sec.id]||[]; const max=secMax(sec);
+  let missing=0; for(let i=0;i<max;i++){ if(a[i]===undefined||a[i]===null||a[i]==='') missing++; }
+  if(missing>0 && !confirm(`아직 ${missing}개를 안 풀었어요. 그래도 제출할까요?`)) return;
+  const r = sec.type==='mc'?gradeMC(sec):gradeCloze(sec);
+  S.results[sec.id]=r;
+  saveProgress();
+  const btn=$('.submitbar .btn'); btn.disabled=true; btn.textContent='저장 중…';
+  const payload={ sections:{ [sec.id]: {name:sec.name,score:r.score,total:r.total,detail:r.detail,submittedAt:now()} } };
+  const sum = Object.values(S.results).reduce((x,y)=>x+y.score,0);
+  const done = S.secIdx===sections().length-1;
+  try{
+    await fb.patch(`results/${S.setId}/${S.resultId}`, {name:S.name, total:sum, totalMax:totalMax(), done, lastAt:now(), ...(done?{submittedAt:now()}:{})});
+    await fb.patch(`results/${S.setId}/${S.resultId}/sections`, payload.sections);
+  }catch(e){ /* keep going; local progress saved */ }
+  showSectionResult(sec,r);
+}
+
+function showSectionResult(sec,r){
+  const pct=Math.round(r.score/r.total*100);
+  const head=`<header class="top sticky"><div class="brand sm">TERRY'S <span>WEEKLY</span></div><div class="who">${esc(S.name)}</div></header><div class="wrap">${progressBar()}
+  <div class="scorecard"><div class="lab">${esc(sec.name)} 결과</div><div class="big">${r.score}<span>/ ${r.total}</span></div><div class="pct">${pct}점</div></div>`;
+  let body='';
+  if(sec.type==='mc'){
+    body = `<div class="grid">${r.detail.map((d,i)=>`<div class="cell ${d.ok?'ok':'no'}">${i+1}</div>`).join('')}</div>
+    <details class="review"><summary>틀린 문제 다시 보기 (${r.detail.filter(d=>!d.ok).length}개)</summary>
+    ${sec.questions.map((q,i)=>r.detail[i].ok?'':`<div class="q rv"><div class="qn">${String(i+1).padStart(2,'0')}</div><div class="qbody"><div class="qt">${q.q}</div>${q.passage?`<div class="passage">${q.passage}</div>`:''}
+      <div class="choices">${q.choices.map((c,j)=>`<div class="ch ${j===q.answer?'right':''} ${j===r.detail[i].a&&j!==q.answer?'wrong':''}"><span class="c">${CIRC[j]}</span><span class="ct">${c}</span></div>`).join('')}</div></div></div>`).join('')}
+    </details>`;
+  } else {
+    let k=0;
+    body = `<div class="part review-cloze">${sec.parts.map(p=>`<h3>${esc(p.title)}</h3>${p.lines.map(l=>{
+      const html=l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{ const d=r.detail[k++]; return d.ok?`<span class="bk ok">${esc(d.c)}</span>`:`<span class="bk no"><s>${esc(d.a||'　')}</s> ${esc(d.c)}</span>`; });
+      return `<div class="line">${l.s?`<span class="sp">${esc(l.s)}</span>`:l.n?`<span class="sp n">${String(l.n).padStart(2,'0')}</span>`:''}<span class="lt">${html}</span></div>`;
+    }).join('')}`).join('')}</div>`;
+  }
+  const last = S.secIdx===sections().length-1;
+  render(head+body+`<div class="submitbar"><button class="btn big" onclick="nextSection()">${last?'전체 결과 보기':'다음 섹션 →'}</button></div></div>`);
+}
+
+function nextSection(){
+  if(S.secIdx<sections().length-1){ S.secIdx++; saveProgress(); showSection(); }
+  else showFinal();
+}
+
+function showFinal(){
+  const sum=Object.values(S.results).reduce((x,y)=>x+y.score,0); const max=totalMax();
+  clearProgress();
+  render(`<header class="top"><div class="brand">TERRY'S <span>WEEKLY</span></div></header><main class="wrap">
+    <div class="scorecard final"><div class="lab">${esc(S.name)} · ${esc(S.set.title)}</div><div class="big">${sum}<span>/ ${max}</span></div><div class="pct">${Math.round(sum/max*100)}점</div></div>
+    <table class="tbl">${sections().map(s=>{const r=S.results[s.id]||{score:0,total:secMax(s)};return `<tr><td>${esc(s.name)}</td><td class="r"><b>${r.score}</b> / ${r.total}</td><td class="r muted">${Math.round(r.score/r.total*100)}%</td></tr>`;}).join('')}</table>
+    <p class="muted center">결과가 선생님께 전송됐어요. 수고했어요! 🎉</p>
+  </main>`);
+}
+
+boot();
+</script>
+</body>
+</html>
