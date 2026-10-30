@@ -15,3 +15,5 @@ Vercel이 이 레포(main)를 자동 배포 → weekly.terrys.kr (가비아 CNAM
 1. 테리에게 "학생/과/범위" 알려주면 `sets/xxx.json` 생성
 2. `/admin` → [세트 관리] → JSON 등록
 3. [링크 복사] → 학생에게 카톡으로 전송
+
+<!-- deploy: 2026-10-30 -->
