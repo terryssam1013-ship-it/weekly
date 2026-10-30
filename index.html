@@ -155,7 +155,7 @@ function renderCloze(sec){
   return sec.parts.map(p=>`<div class="part"><h3>${esc(p.title)}</h3>${p.lines.map(l=>{
     const html = l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{
       const k=clozeIdx++; const first=ans.split('|')[0];
-      return `<input class="blank" data-k="${k}" style="width:${Math.max(4,first.length*0.75+1.5)}ch" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(saved[k]||'')}" oninput="typed(${k},this.value)">`;
+      return `<input class="blank" data-k="${k}" style="width:${Math.min(42,Math.max(5,(/[가-힣]/.test(first)?first.length*1.7:first.length*0.8)+2))}ch" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(saved[k]||'')}" oninput="typed(${k},this.value)">`;
     });
     return `<div class="line">${l.s?`<span class="sp">${esc(l.s)}</span>`:l.n?`<span class="sp n">${String(l.n).padStart(2,'0')}</span>`:''}<span class="lt">${html}</span></div>`;
   }).join('')}</div>`).join('');
