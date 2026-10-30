@@ -67,7 +67,7 @@ async function boot(){
     return render(`<div class="center card">
       <h2>이어서 풀기</h2>
       <p><b>${esc(S.name)}</b> 님, ${S.secIdx+1}번째 섹션(${esc(sections()[S.secIdx].name)})부터 이어서 풀 수 있어요.</p>
-      <button class="btn" onclick="showSection()">이어서 풀기</button>
+      <button class="btn" onclick="trapBack();showSection()">이어서 풀기</button>
       <button class="btn ghost" onclick="clearProgress();S.answers={};S.results={};S.secIdx=0;showStart()">처음부터 다시</button>
     </div>`);
   }
@@ -107,11 +107,22 @@ async function start(){
   const nm = $('#nm').value.trim();
   if(!nm){ $('#nm').focus(); $('#nm').classList.add('err'); return; }
   S.name = nm; S.secIdx=0; S.answers={}; S.results={}; S.startedAt=now();
+  let prev=null;
+  try{ const all=await fb.get(`results/${S.setId}`)||{}; const cands=Object.entries(all).filter(([k,v])=>v&&v.name===nm&&!v.done&&v.sections).sort((a,b)=>(b[1].lastAt||'').localeCompare(a[1].lastAt||'')); if(cands.length) prev=cands[0]; }catch(e){}
+  if(prev){
+    S.resultId=prev[0]; S.startedAt=prev[1].startedAt||now();
+    sections().forEach(s=>{ const x=prev[1].sections[s.id]; if(x) S.results[s.id]={score:x.score,total:x.total,detail:x.detail||[]}; });
+    const idx=sections().findIndex(s=>!S.results[s.id]);
+    S.secIdx=idx<0?sections().length-1:idx; saveProgress(); trapBack();
+    if(idx<0) return showFinal();
+    return showSection();
+  }
   S.resultId = `${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-  saveProgress();
+  saveProgress(); trapBack();
   fb.put(`results/${S.setId}/${S.resultId}`, {name:S.name, startedAt:S.startedAt, setTitle:S.set.title, total:0, totalMax: totalMax(), done:false}).catch(()=>{});
   showSection();
 }
+function trapBack(){ try{ history.pushState({w:1},''); window.onpopstate=()=>{ history.pushState({w:1},''); }; }catch(e){} }
 
 function progressBar(){
   const n=sections().length;
