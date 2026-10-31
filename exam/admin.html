@@ -97,14 +97,14 @@ function checkPin(){ if($('#pin').value===CONFIG.adminPin){sessionStorage.setIte
 /* ---- main ---- */
 async function main(){
   app.innerHTML=`<header class="top"><div class="brand">TERRY'S <span>EXAM</span> · 관리자</div><a class="who" href="/" target="_blank">학생 페이지 ↗</a></header>
-  <div class="wrap"><div class="tabs"><button class="tab on" data-t="results" onclick="setTab('results')">제출 결과</button><button class="tab" data-t="sets" onclick="setTab('sets')">세트 관리</button></div><div id="pane"></div></div>`;
+  <div class="wrap"><div class="tabs"><button class="tab on" data-t="results" onclick="setTab('results')">제출 결과</button><button class="tab" data-t="memo" onclick="setTab('memo')">본문 암기</button><button class="tab" data-t="sets" onclick="setTab('sets')">세트 관리</button></div><div id="pane"></div></div>`;
   A.meta=(await fb.get('setsMeta'))||{};
   const ids=Object.keys(A.meta).sort((a,b)=>(A.meta[b].createdAt||'').localeCompare(A.meta[a].createdAt||''));
   A.setId=null;
   renderPane();
 }
 function setTab(t){A.tab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t));renderPane();}
-function renderPane(){ A.tab==='results'?renderResults():renderSets(); }
+function renderPane(){ if(A.es){A.es.close();A.es=null;} A.tab==='results'?renderResults():A.tab==='memo'?renderMemo():renderSets(); }
 
 /* ---- results ---- */
 async function renderResults(){
@@ -121,7 +121,7 @@ async function renderOverview(){
   const pane=$('#pane'); pane.innerHTML='<div class="spinner"></div>';
   A.meta=(await fb.get('setsMeta'))||{};
   const all=(await fb.get('results'))||{};
-  const ids=Object.keys(A.meta);
+  const ids=Object.keys(A.meta).filter(k=>A.meta[k].type!=='memo');
   if(!ids.length){pane.innerHTML='<p class="muted">시험지가 없어요. [세트 관리]에서 먼저 올려주세요.</p>';return;}
   const G=['중2','중3','고1'];
   const key=id=>{const m=A.meta[id];return [G.indexOf(m.grade)<0?9:G.indexOf(m.grade),m.book||'',m.order??999,m.createdAt||''];};
@@ -179,6 +179,21 @@ function showDetail(id,keep){
 function selRv(sid,i){A.rvSel={s:sid,i};showDetail(A.sel,true);setTimeout(()=>document.getElementById('rvsel')?.scrollIntoView({behavior:'smooth',block:'center'}),50);}
 function rvBox(s,i,d,sel){const q=s.questions[i];if(!q)return '';const ref=q.ref!=null?s.questions[q.ref]:null;const gp=q.gp||(ref&&ref.gp);
   return `<div class="q rv" ${sel?'id="rvsel" style="border:2px solid var(--brand);border-radius:12px;padding:12px;margin:10px 0"':'style="margin:4px 0"'}><div class="qn">${String(i+1).padStart(2,'0')}</div><div class="qbody">${gp?`<details><summary class="small" style="color:var(--brand);cursor:pointer;font-weight:700">지문 보기</summary><div class="passage">${gp}</div></details>`:''}<div class="qt">${q.q}</div>${q.passage?`<div class="passage">${q.passage}</div>`:''}<div class="choices">${q.choices.map((c,j)=>`<div class="ch ${j===q.answer?'right':''} ${j===d.a&&j!==q.answer?'wrong':''}"><span class="c">${CIRC[j]}</span><span class="ct">${c}</span></div>`).join('')}</div><div class="ans" style="margin-top:6px">학생 답 <b style="color:${d.ok?'var(--ok)':'var(--no)'}">${d.a!=null?CIRC[d.a]:'미답'}</b> · 정답 <b style="color:var(--ok)">${CIRC[q.answer]}</b>${sel?` <button class="btn sm gray" style="margin-left:8px" onclick="A.rvSel=null;showDetail(A.sel,true)">닫기</button>`:''}</div>${q.e?`<div class="ans" style="background:#fff8e1;border-radius:8px;padding:8px 10px;margin-top:6px;color:#5a4500"><b>해설</b> ${q.e}</div>`:''}</div></div>`;}
+async function renderMemo(){
+  const pane=$('#pane'); A.meta=(await fb.get('setsMeta'))||{};
+  const ids=Object.keys(A.meta).filter(k=>A.meta[k].type==='memo').sort((a,b)=>(A.meta[a].order??999)-(A.meta[b].order??999));
+  if(!ids.length){pane.innerHTML='<p class="muted">본문 암기 세트가 없어요.</p>';return;}
+  A.memoId=A.memoId&&ids.includes(A.memoId)?A.memoId:ids[0];
+  pane.innerHTML=`<div class="row"><select class="inp" onchange="A.memoId=this.value;renderMemo()">${ids.map(id=>`<option value="${esc(id)}" ${id===A.memoId?'selected':''}>${esc(A.meta[id].title)}</option>`).join('')}</select><button class="btn sm gray" onclick="renderMemo()">새로고침</button></div><div id="mm"><div class="spinner"></div></div>`;
+  const [set,prog]=await Promise.all([fb.get(`memoSets/${A.memoId}`),fb.get(`memoProg/${A.memoId}`)]);
+  const n=set.sents.length; const plain=t=>t.replace(/\{\{([^}|]+)[^}]*\}\}/g,'$1');
+  const rs=Object.values(prog||{}).filter(r=>r&&r.name).sort((a,b)=>(b.pct||0)-(a.pct||0));
+  const c=p=>!p||!p.lv?'#eceef3':p.ok?'#bfe8cc':(p.w||p.lv<=2)?'#f7c6c6':'#ffe2a8';
+  const block=[...Array(n).keys()].map(i=>{let b=0;rs.forEach(r=>{const p=r.s?.[i];if(p&&p.lv&&!p.ok&&(p.w||p.lv<=2))b++;});return {i,b};}).filter(x=>x.b>0).sort((a,b)=>b.b-a.b).slice(0,5);
+  $('#mm').innerHTML=rs.length?`<div style="overflow-x:auto;background:#fff;border-radius:14px;padding:10px"><table class="res" style="font-size:12px"><thead><tr><th>이름</th><th>암기</th>${[...Array(n).keys()].map(i=>`<th style="padding:4px 1px">${i+1}</th>`).join('')}<th>마지막</th></tr></thead><tbody>${rs.map(r=>`<tr><td class="nm">${esc(r.name)}</td><td><b>${r.pct||0}%</b><div class="muted" style="font-size:11px">${r.mastered||0}/${n}</div></td>${[...Array(n).keys()].map(i=>{const p=r.s?.[i];return `<td style="padding:3px 1px"><div title="${i+1}번: ${p?.ok?'완료':p?.lv?(p.lv+'단계'+(p.w?' · 틀림':'')):'시작 전'}" style="width:16px;height:16px;border-radius:4px;margin:auto;background:${c(p)}"></div></td>`;}).join('')}<td class="muted">${fmt(r.updatedAt)}</td></tr>`).join('')}</tbody></table></div>
+  <div class="detail"><h3>반 전체가 많이 막힌 문장 TOP 5</h3>${block.length?block.map(x=>`<div class="qrow" style="grid-template-columns:44px 1fr 90px"><b>${x.i+1}</b><span style="white-space:normal">${esc(plain(set.sents[x.i]))}</span><span class="sc lo">${x.b}명 막힘</span></div>`).join(''):'<p class="muted">아직 막힌 문장이 없어요.</p>'}</div>
+  <p class="muted small">회색 시작 전 · 빨강 다시 외우기(1~2단계 또는 최근에 틀림) · 노랑 외우는 중 · 초록 암기 완료</p>`:'<p class="muted">아직 학습한 학생이 없어요.</p>';
+}
 async function delResult(id,name){ if(!confirm(`${name} 기록을 삭제할까요?`))return; await fb.del(`results/${A.setId}/${id}`); toast('삭제했어요'); }
 function downloadCSV(){
   const secs=A.set?.sections||[]; const rs=rows();
