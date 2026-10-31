@@ -9,9 +9,8 @@
 :root{--brand:#1B5E3B;--accent:#f5b301}
 .tag{background:#e6f2ea}
 .ch.on{background:#e8f4ec}
-.blank{background:#eef7f1}
 .grades{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
-.grade{background:var(--card);border-radius:16px;padding:26px 8px;text-align:center;font-size:22px;font-weight:800;color:var(--brand);border:2px solid var(--line)}
+.grade{background:var(--card);border-radius:16px;padding:24px 8px;text-align:center;font-size:22px;font-weight:800;color:var(--brand);border:2px solid var(--line)}
 .grade small{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:4px}
 .crumb{font-size:14px;color:var(--muted);margin:2px 0 10px}
 .crumb a{color:var(--brand);font-weight:700}
@@ -22,159 +21,274 @@
 .mine{font-size:13px;color:var(--muted);margin-top:8px}
 .mine .x{color:var(--no);font-weight:700}.mine .o{color:var(--ok);font-weight:700}
 .rvh{font-size:18px;margin:20px 0 10px}
-.rv .refp{margin:8px 0}
-.rv .refp summary{font-size:13px;color:var(--brand);cursor:pointer;font-weight:700}
+.refp{margin:8px 0}.refp summary{font-size:13px;color:var(--brand);cursor:pointer;font-weight:700}
+.top .right{display:flex;gap:6px;align-items:center}
+.top .who{cursor:pointer}
+.setcard{display:flex;align-items:center;gap:10px}
+.setcard .info{flex:1;min-width:0}
+.st-badge{flex:none;font-size:12.5px;font-weight:800;padding:5px 10px;border-radius:999px;white-space:nowrap}
+.st-badge.done{background:var(--okbg);color:var(--ok)}
+.st-badge.ing{background:#fff4df;color:#b45309}
+.st-badge.new{background:#f1f3f7;color:#8a8f9c}
+.setcard.isdone{background:#f7fbf8}
+.tabs2{display:flex;gap:6px;margin:4px 0 14px}
+.tabs2 a{padding:8px 14px;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:14px}
+.tabs2 a.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btnrow{display:flex;gap:8px}.btnrow .btn{margin-top:10px}
+.retrytag{display:inline-block;background:#fff4df;color:#b45309;font-weight:800;font-size:12px;padding:3px 9px;border-radius:999px;margin-bottom:6px}
+.saved{font-size:12px;color:var(--muted);text-align:center;margin-top:6px;min-height:16px}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script src="/config.js"></script>
 <script>
-const ROOT='exam';
+const ROOT='exam', GRADES=['중2','중3','고1'];
 const BRAND=`TERRY'S <span>EXAM</span>`;
-const GRADES=['중2','중3','고1'];
-const S={setId:null,set:null,name:'',resultId:null,secIdx:0,answers:{},results:{},startedAt:null};
+const S={setId:null,set:null,name:'',resultId:null,secIdx:0,answers:{},results:{},startedAt:null,retry:null};
 const $=s=>document.querySelector(s); const app=$('#app');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const CIRC=['①','②','③','④','⑤']; const LS='exam_progress_';
+const CIRC=['①','②','③','④','⑤']; const LS='exam_progress_', LSN='exam_name';
 const fb={url:p=>`${CONFIG.dbUrl}/${ROOT}/${p}.json`,get:p=>fetch(fb.url(p)).then(r=>r.json()),put:(p,v)=>fetch(fb.url(p),{method:'PUT',body:JSON.stringify(v)}).then(r=>r.json()),patch:(p,v)=>fetch(fb.url(p),{method:'PATCH',body:JSON.stringify(v)}).then(r=>r.json())};
+const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 function norm(s){return String(s||'').trim().toLowerCase().replace(/[’‘`]/g,"'").replace(/[.,!?;:"]/g,'').replace(/\s+/g,' ');}
-function saveProgress(){try{localStorage.setItem(LS+S.setId,JSON.stringify({name:S.name,resultId:S.resultId,secIdx:S.secIdx,answers:S.answers,results:S.results,startedAt:S.startedAt}));}catch(e){}}
-function loadProgress(){try{return JSON.parse(localStorage.getItem(LS+S.setId)||'null');}catch(e){return null;}}
-function clearProgress(){try{localStorage.removeItem(LS+S.setId);}catch(e){}}
+function saveProgress(){ls.set(LS+S.setId,JSON.stringify({name:S.name,resultId:S.resultId,secIdx:S.secIdx,answers:S.answers,results:S.results,startedAt:S.startedAt}));}
+function loadProgress(){try{return JSON.parse(ls.get(LS+S.setId)||'null');}catch(e){return null;}}
+function clearProgress(){ls.del(LS+S.setId);}
 function now(){return new Date().toISOString();}
 function sections(){return S.set.sections;}
 function secMax(s){return s.type==='mc'?s.questions.length:s.parts.reduce((a,p)=>a+p.lines.reduce((b,l)=>b+(l.t.match(/\{\{/g)||[]).length,0),0);}
 function totalMax(){return sections().reduce((a,s)=>a+secMax(s),0);}
 function render(h){app.innerHTML=h;window.scrollTo(0,0);}
 function trapBack(){try{history.pushState({w:1},'');window.onpopstate=()=>{history.pushState({w:1},'');};}catch(e){}}
-const hdr=(sticky)=>`<header class="top ${sticky?'sticky':''}"><a class="brand ${sticky?'sm':''}" href="/">${BRAND}</a>${S.name&&sticky?`<div class="who">${esc(S.name)}</div>`:''}</header>`;
+function untrap(){window.onpopstate=null;}
+function me(){return (ls.get(LSN)||'').trim();}
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+const hdr=(sticky)=>`<header class="top ${sticky?'sticky':''}"><a class="brand ${sticky?'sm':''}" href="/">${BRAND}</a><div class="right">${me()?`<span class="who" onclick="${sticky?'':'logout()'}">${esc(me())}${sticky?'':' · 변경'}</span>`:''}</div></header>`;
+function logout(){if(confirm('이름을 바꿀까요?')){ls.del(LSN);location.href='/';}}
 
+/* ---- my records (all sets) ---- */
+async function myRecords(){
+  const all=(await fb.get('results'))||{}; const nm=me(); const out={};
+  for(const [sid,recs] of Object.entries(all)){
+    const mine=Object.entries(recs||{}).filter(([k,v])=>v&&v.name===nm).map(([k,v])=>({id:k,...v}));
+    if(!mine.length) continue;
+    const done=mine.filter(r=>r.done).sort((a,b)=>(b.submittedAt||'').localeCompare(a.submittedAt||''));
+    const ing=mine.filter(r=>!r.done).sort((a,b)=>(b.lastAt||'').localeCompare(a.lastAt||''));
+    out[sid]={done:done[0]||null,ing:ing[0]||null,count:done.length};
+  }
+  return out;
+}
+function badge(r){
+  if(r?.done) return `<span class="st-badge done">✔ 완료 ${pct(r.done.total,r.done.totalMax)}점</span>`;
+  if(r?.ing) return `<span class="st-badge ing">푸는 중</span>`;
+  return `<span class="st-badge new">안 풀었음</span>`;
+}
+
+/* ---- boot / login ---- */
 async function boot(){
   const u=new URL(location.href);
+  if(!me()) return showLogin();
+  S.name=me();
   S.setId=u.searchParams.get('s');
-  if(!S.setId) return showHome(u.searchParams.get('g'),u.searchParams.get('b'));
-  render(`<div class="center"><div class="spinner"></div><p>문제 불러오는 중…</p></div>`);
+  if(!S.setId) return showHome(u.searchParams.get('g'),u.searchParams.get('b'),u.searchParams.get('v'));
+  render(`<div class="center"><div class="spinner"></div><p>불러오는 중…</p></div>`);
   try{S.set=await fb.get(`sets/${S.setId}`);}catch(e){S.set=null;}
   if(!S.set) return render(`<div class="center"><h2>시험지를 찾을 수 없어요</h2><a class="btn ghost" href="/">처음으로</a></div>`);
-  const p=loadProgress();
-  if(p&&p.name&&p.secIdx<sections().length){
-    S.name=p.name;S.resultId=p.resultId;S.secIdx=p.secIdx;S.answers=p.answers||{};S.results=p.results||{};S.startedAt=p.startedAt;
-    return render(`<div class="center card"><h2>이어서 풀기</h2><p><b>${esc(S.name)}</b> 학생, 풀던 시험을 이어서 풀 수 있어요.</p>
-      <button class="btn" onclick="trapBack();showSection()">이어서 풀기</button>
-      <button class="btn ghost" onclick="clearProgress();S.answers={};S.results={};S.secIdx=0;S.name='';showStart()">처음부터 다시</button></div>`);
-  }
+  if(u.searchParams.get('r')) return showPast(u.searchParams.get('r'));
+  let recs={}; try{recs=(await fb.get(`results/${S.setId}`))||{};}catch(e){}
+  const mine=Object.entries(recs).filter(([k,v])=>v&&v.name===S.name);
+  const ing=mine.filter(([k,v])=>!v.done).sort((a,b)=>(b[1].lastAt||'').localeCompare(a[1].lastAt||''))[0];
+  const done=mine.filter(([k,v])=>v.done).sort((a,b)=>(b[1].submittedAt||'').localeCompare(a[1].submittedAt||''))[0];
+  if(ing) return resumeRecord(ing[0],ing[1]);
+  if(done) return showDoneChoice(done[0],done[1]);
   showStart();
 }
+function showLogin(){
+  render(hdr()+`<main class="wrap"><div class="card" style="margin-top:20px"><h2 style="margin:0 0 6px">내 이름으로 시작하기</h2>
+  <p class="muted small" style="margin:0 0 12px">이름을 넣으면 내가 푼 시험지와 안 푼 시험지를 구분해서 보여줘요.</p>
+  <label class="lbl">이름</label><input id="nm" class="inp" placeholder="이름 (예: 홍길동)" autocomplete="off">
+  <button class="btn big" onclick="doLogin()">들어가기</button></div></main>`);
+  $('#nm').focus(); $('#nm').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+}
+function doLogin(){const v=$('#nm').value.trim().replace(/\s+/g,'');if(!v){$('#nm').classList.add('err');return;}ls.set(LSN,v);boot();}
 
-async function showHome(g,b){
+async function showHome(g,b,v){
   render(hdr()+`<main class="wrap"><div class="center" style="margin:30px auto"><div class="spinner"></div></div></main>`);
-  let meta={}; try{meta=await fb.get('setsMeta')||{};}catch(e){}
-  const items=Object.entries(meta).filter(([k,v])=>v&&v.active!==false);
-  if(!g){
-    return render(hdr()+`<main class="wrap"><h2 class="h">학년을 선택하세요</h2><div class="grades">${GRADES.map(x=>{const n=items.filter(([k,v])=>v.grade===x).length;return `<a class="grade" href="?g=${encodeURIComponent(x)}">${x}<small>${n?n+'개 시험지':'준비 중'}</small></a>`;}).join('')}</div></main>`);
+  let meta={},mine={}; try{[meta,mine]=await Promise.all([fb.get('setsMeta').then(x=>x||{}),myRecords()]);}catch(e){}
+  const items=Object.entries(meta).filter(([k,x])=>x&&x.active!==false);
+  const tabs=`<div class="tabs2"><a href="/" class="${v?'':'on'}">시험지</a><a href="?v=me" class="${v?'on':''}">내 기록</a></div>`;
+  const card=([id,m])=>{const r=mine[id];return `<a class="setcard ${r?.done?'isdone':''}" href="?s=${encodeURIComponent(id)}"><div class="info"><div class="t">${esc(m.title||id)}</div><div class="st">${esc(m.subtitle||'')}</div></div>${badge(r)}</a>`;};
+  if(v==='me'){
+    const ids=Object.keys(mine).filter(id=>meta[id]);
+    const doneN=ids.filter(id=>mine[id].done).length;
+    return render(hdr()+`<main class="wrap">${tabs}<h2 class="h">${esc(me())}의 기록 <span class="muted small">완료 ${doneN}개</span></h2>
+      ${ids.length?ids.sort((a,b)=>((mine[b].done?.submittedAt||mine[b].ing?.lastAt||'')).localeCompare(mine[a].done?.submittedAt||mine[a].ing?.lastAt||'')).map(id=>card([id,meta[id]])).join(''):'<p class="muted">아직 푼 시험지가 없어요.</p>'}</main>`);
   }
-  const inG=items.filter(([k,v])=>v.grade===g);
-  const books=[...new Set(inG.map(([k,v])=>v.book||'기타'))];
+  if(!g){
+    return render(hdr()+`<main class="wrap">${tabs}<h2 class="h">학년을 선택하세요</h2><div class="grades">${GRADES.map(x=>{const inG=items.filter(([k,m])=>m.grade===x);const d=inG.filter(([k])=>mine[k]?.done).length;return `<a class="grade" href="?g=${encodeURIComponent(x)}">${x}<small>${inG.length?`${d} / ${inG.length} 완료`:'준비 중'}</small></a>`;}).join('')}</div></main>`);
+  }
+  const inG=items.filter(([k,m])=>m.grade===g);
+  const books=[...new Set(inG.map(([k,m])=>m.book||'기타'))];
   if(!b){
     return render(hdr()+`<main class="wrap"><div class="crumb"><a href="/">학년</a> › ${esc(g)}</div><h2 class="h">${esc(g)} — 교재 선택</h2>
-      ${books.length?books.map(x=>`<a class="setcard" href="?g=${encodeURIComponent(g)}&b=${encodeURIComponent(x)}"><div class="t">${esc(x)}</div><div class="st">${inG.filter(([k,v])=>(v.book||'기타')===x).length}개 시험지</div></a>`).join(''):'<p class="muted">아직 등록된 시험지가 없어요.</p>'}</main>`);
+      ${books.length?books.map(x=>{const L=inG.filter(([k,m])=>(m.book||'기타')===x);const d=L.filter(([k])=>mine[k]?.done).length;return `<a class="setcard" href="?g=${encodeURIComponent(g)}&b=${encodeURIComponent(x)}"><div class="info"><div class="t">${esc(x)}</div><div class="st">시험지 ${L.length}개</div></div><span class="st-badge ${d===L.length?'done':d?'ing':'new'}">${d} / ${L.length} 완료</span></a>`;}).join(''):'<p class="muted">아직 등록된 시험지가 없어요.</p>'}</main>`);
   }
-  const list=inG.filter(([k,v])=>(v.book||'기타')===b).sort((x,y)=>(x[1].order??999)-(y[1].order??999)||(x[1].createdAt||'').localeCompare(y[1].createdAt||''));
+  const list=inG.filter(([k,m])=>(m.book||'기타')===b).sort((x,y)=>(x[1].order??999)-(y[1].order??999)||(x[1].createdAt||'').localeCompare(y[1].createdAt||''));
   render(hdr()+`<main class="wrap"><div class="crumb"><a href="/">학년</a> › <a href="?g=${encodeURIComponent(g)}">${esc(g)}</a> › ${esc(b)}</div><h2 class="h">${esc(b)}</h2>
-    ${list.map(([id,m])=>`<a class="setcard" href="?s=${encodeURIComponent(id)}"><div class="t">${esc(m.title||id)}</div><div class="st">${esc(m.subtitle||'')}</div></a>`).join('')||'<p class="muted">시험지가 없어요.</p>'}</main>`);
+    ${list.map(card).join('')||'<p class="muted">시험지가 없어요.</p>'}</main>`);
 }
 
+/* ---- start / resume ---- */
 function showStart(){
   const set=S.set;
   render(hdr()+`<main class="wrap"><div class="card">
     <div class="tag">${esc(set.title)}</div><h1 class="title">${esc(set.subtitle||'')}</h1>
     <ul class="seclist">${sections().map((s,i)=>`<li><span class="num">${i+1}</span>${esc(s.name)}<span class="cnt">${secMax(s)}${s.type==='mc'?'문항':'칸'}</span></li>`).join('')}</ul>
-    <label class="lbl">이름</label><input id="nm" class="inp" type="text" placeholder="이름을 입력하세요" autocomplete="off" value="${esc(S.name)}">
+    <p style="margin:0 0 4px"><b>${esc(S.name)}</b> 학생으로 시작해요.</p>
     <button class="btn big" onclick="start()">시작하기</button>
-    <p class="muted small">제출하면 바로 채점되고, 틀린 문제는 해설과 함께 보여줘요.</p></div></main>`);
-  $('#nm').addEventListener('keydown',e=>{if(e.key==='Enter')start();});
+    <p class="muted small">고른 답은 자동 저장돼서 나갔다 들어와도 이어서 풀 수 있어요. 제출하면 바로 채점되고 틀린 문제는 해설과 함께 보여줘요.</p></div></main>`);
 }
-
 async function start(){
-  const nm=$('#nm').value.trim(); if(!nm){$('#nm').focus();$('#nm').classList.add('err');return;}
-  S.name=nm;S.secIdx=0;S.answers={};S.results={};S.startedAt=now();
-  let prev=null;
-  try{const all=await fb.get(`results/${S.setId}`)||{};const c=Object.entries(all).filter(([k,v])=>v&&v.name===nm&&!v.done&&v.sections).sort((a,b)=>(b[1].lastAt||'').localeCompare(a[1].lastAt||''));if(c.length)prev=c[0];}catch(e){}
-  if(prev){S.resultId=prev[0];S.startedAt=prev[1].startedAt||now();sections().forEach(s=>{const x=prev[1].sections[s.id];if(x)S.results[s.id]={score:x.score,total:x.total,detail:x.detail||[]};});const idx=sections().findIndex(s=>!S.results[s.id]);S.secIdx=idx<0?sections().length-1:idx;saveProgress();trapBack();if(idx<0)return showFinal();return showSection();}
+  S.secIdx=0;S.answers={};S.results={};S.startedAt=now();
   S.resultId=`${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   saveProgress();
-  fb.put(`results/${S.setId}/${S.resultId}`,{name:S.name,startedAt:S.startedAt,setTitle:S.set.title,total:0,totalMax:totalMax(),done:false,lastAt:now()}).catch(()=>{});
+  await fb.put(`results/${S.setId}/${S.resultId}`,{name:S.name,startedAt:S.startedAt,setTitle:S.set.title,total:0,totalMax:totalMax(),done:false,lastAt:now()}).catch(()=>{});
   trapBack(); showSection();
 }
+function resumeRecord(rid,rec){
+  S.resultId=rid;S.startedAt=rec.startedAt||now();S.results={};S.answers={};
+  sections().forEach(s=>{const x=rec.sections?.[s.id];if(x)S.results[s.id]={score:x.score,total:x.total,detail:x.detail||[]};});
+  const draft=rec.draft||{}; Object.keys(draft).forEach(k=>{S.answers[k]=toArr(draft[k]);});
+  const p=loadProgress(); if(p&&p.resultId===rid&&p.answers){Object.keys(p.answers).forEach(k=>{const a=p.answers[k]||[];if(a.filter(x=>x!=null&&x!=='').length>=(S.answers[k]||[]).filter(x=>x!=null&&x!=='').length)S.answers[k]=a;});}
+  const idx=sections().findIndex(s=>!S.results[s.id]); S.secIdx=idx<0?sections().length-1:idx;
+  saveProgress();
+  const sec=sections()[S.secIdx]; const n=(S.answers[sec.id]||[]).filter(x=>x!=null&&x!=='').length;
+  render(hdr()+`<main class="wrap"><div class="card center" style="margin-top:20px"><div class="tag">${esc(S.set.title)}</div><h2>이어서 풀기</h2>
+    <p><b>${esc(S.name)}</b> 학생, 저장된 답 <b>${n}개</b>가 있어요. 이어서 풀까요?</p>
+    <button class="btn" onclick="trapBack();showSection()">이어서 풀기</button>
+    <button class="btn ghost" onclick="if(confirm('저장된 답을 지우고 처음부터 풀까요?')){clearProgress();start()}">처음부터 다시</button></div></main>`);
+}
+function toArr(o){if(Array.isArray(o))return o;const a=[];Object.keys(o||{}).forEach(k=>{a[+k]=o[k];});return a;}
+function showDoneChoice(rid,rec){
+  render(hdr()+`<main class="wrap"><div class="card center" style="margin-top:20px"><div class="tag">${esc(S.set.title)}</div>
+    <h2>이미 푼 시험지예요</h2><div class="scorecard" style="margin:8px 0"><div class="big">${rec.total}<span>/ ${rec.totalMax}</span></div><div class="pct">${pct(rec.total,rec.totalMax)}점</div><div class="muted small" style="margin-top:6px">${fmtD(rec.submittedAt)} 제출</div></div>
+    <button class="btn" onclick="location.href='?s=${encodeURIComponent(S.setId)}&r=${encodeURIComponent(rid)}'">결과 · 오답 풀이 보기</button>
+    <button class="btn ghost" onclick="if(confirm('처음부터 다시 풀까요? (이전 기록은 남아 있어요)'))start()">처음부터 다시 풀기</button></div></main>`);
+}
+function fmtD(iso){if(!iso)return '';const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
 
+/* ---- solving ---- */
 function progressBar(){return sections().length>1?`<div class="prog">${sections().map((s,i)=>`<div class="seg ${i<S.secIdx?'done':i===S.secIdx?'cur':''}"></div>`).join('')}</div>`:'';}
 function qHead(q){return q.head?`<div class="ghead">${q.head}</div>${q.gp?`<div class="gpas"><div class="passage">${q.gp}</div></div>`:''}`:'';}
-
+function qCard(q,i,saved,num,extra=''){
+  return `<div class="q" id="q${i}"><div class="qn">${String(num).padStart(2,'0')}</div><div class="qbody">${extra}
+    <div class="qt">${q.q}</div>${q.passage?`<div class="passage">${q.passage}</div>`:''}
+    <div class="choices">${q.choices.map((c,j)=>`<label class="ch ${saved===j?'on':''}"><input type="radio" name="q${i}" value="${j}" ${saved===j?'checked':''} onchange="pick(${i},${j})"><span class="c">${CIRC[j]}</span><span class="ct">${c}</span></label>`).join('')}</div></div></div>`;
+}
 function showSection(){
+  S.retry=null;
   const sec=sections()[S.secIdx];
   let body='';
-  if(sec.type==='mc'){
-    const saved=S.answers[sec.id]||[];
-    body=sec.questions.map((q,i)=>`${qHead(q)}
-      <div class="q" id="q${i}"><div class="qn">${String(i+1).padStart(2,'0')}</div><div class="qbody">
-        <div class="qt">${q.q}</div>${q.passage?`<div class="passage">${q.passage}</div>`:''}
-        <div class="choices">${q.choices.map((c,j)=>`<label class="ch ${saved[i]===j?'on':''}"><input type="radio" name="q${i}" value="${j}" ${saved[i]===j?'checked':''} onchange="pick(${i},${j})"><span class="c">${CIRC[j]}</span><span class="ct">${c}</span></label>`).join('')}</div>
-      </div></div>`).join('');
-  } else body=`<p class="intro">${esc(sec.intro||'')}</p>`+renderCloze(sec);
-  render(hdr(1)+`<div class="wrap">${progressBar()}<div class="sechead"><span class="num">${S.secIdx+1}</span><h2>${esc(sec.name)}</h2><span class="cnt">${secMax(sec)}${sec.type==='mc'?'문항':'칸'}</span></div>`+body+`<div class="submitbar"><button class="btn big" onclick="submitSection()">제출하고 채점하기</button></div></div>`);
+  if(sec.type==='mc'){const sv=S.answers[sec.id]||[];body=sec.questions.map((q,i)=>qHead(q)+qCard(q,i,sv[i],i+1)).join('');}
+  else body=`<p class="intro">${esc(sec.intro||'')}</p>`+renderCloze(sec);
+  render(hdr(1)+`<div class="wrap">${progressBar()}<div class="sechead"><span class="num">${S.secIdx+1}</span><h2>${esc(sec.name)}</h2><span class="cnt">${secMax(sec)}${sec.type==='mc'?'문항':'칸'}</span></div>`+body+`<div class="submitbar"><button class="btn big" onclick="submitSection()">제출하고 채점하기</button><div class="saved" id="saved"></div></div></div>`);
 }
-function pick(i,j){const sec=sections()[S.secIdx];S.answers[sec.id]=S.answers[sec.id]||[];S.answers[sec.id][i]=j;document.querySelectorAll(`#q${i} .ch`).forEach((el,k)=>el.classList.toggle('on',k===j));saveProgress();}
+let saveT=null;
+function pushDraft(){
+  saveProgress(); clearTimeout(saveT);
+  const el=$('#saved'); if(el) el.textContent='저장 중…';
+  saveT=setTimeout(async()=>{const sec=sections()[S.secIdx];try{await fb.patch(`results/${S.setId}/${S.resultId}`,{lastAt:now(),[`draft/${sec.id}`]:S.answers[sec.id]||[]});const e2=$('#saved');if(e2)e2.textContent='✓ 자동 저장됨';}catch(e){const e2=$('#saved');if(e2)e2.textContent='이 폰에 저장됨';}},700);
+}
+function pick(i,j){
+  if(S.retry){S.retry.ans[i]=j;document.querySelectorAll(`#q${i} .ch`).forEach((el,k)=>el.classList.toggle('on',k===j));return;}
+  const sec=sections()[S.secIdx];S.answers[sec.id]=S.answers[sec.id]||[];S.answers[sec.id][i]=j;
+  document.querySelectorAll(`#q${i} .ch`).forEach((el,k)=>el.classList.toggle('on',k===j));pushDraft();
+}
 let clozeIdx=0;
 function renderCloze(sec){clozeIdx=0;const saved=S.answers[sec.id]||[];return sec.parts.map(p=>`<div class="part"><h3>${esc(p.title)}</h3>${p.lines.map(l=>{const html=l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{const k=clozeIdx++;const first=ans.split('|')[0];return `<input class="blank" data-k="${k}" style="width:${Math.min(42,Math.max(5,(/[가-힣]/.test(first)?first.length*1.7:first.length*0.8)+2))}ch" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(saved[k]||'')}" oninput="typed(${k},this.value)">`;});return `<div class="line">${l.s?`<span class="sp">${esc(l.s)}</span>`:l.n?`<span class="sp n">${String(l.n).padStart(2,'0')}</span>`:''}<span class="lt">${html}</span></div>`;}).join('')}</div>`).join('');}
-function typed(k,v){const sec=sections()[S.secIdx];S.answers[sec.id]=S.answers[sec.id]||[];S.answers[sec.id][k]=v;saveProgress();}
+function typed(k,v){const sec=sections()[S.secIdx];S.answers[sec.id]=S.answers[sec.id]||[];S.answers[sec.id][k]=v;pushDraft();}
 function gradeMC(sec){const a=S.answers[sec.id]||[];let score=0;const detail=sec.questions.map((q,i)=>{const ok=a[i]===q.answer;if(ok)score++;return {a:a[i]??null,ok,c:q.answer};});return {score,total:sec.questions.length,detail};}
 function gradeCloze(sec){const a=S.answers[sec.id]||[];let k=0,score=0;const detail=[];sec.parts.forEach(p=>p.lines.forEach(l=>{l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{const alts=ans.split('|').map(norm);const g=a[k]||'';const ok=alts.includes(norm(g));if(ok)score++;detail.push({a:g,ok,c:ans.split('|')[0]});k++;return m;});}));return {score,total:k,detail};}
 
 async function submitSection(){
+  if(S.retry) return submitRetry();
   const sec=sections()[S.secIdx];const a=S.answers[sec.id]||[];const max=secMax(sec);
   let miss=0;for(let i=0;i<max;i++){if(a[i]===undefined||a[i]===null||a[i]==='')miss++;}
   if(miss>0&&!confirm(`아직 ${miss}문항을 안 풀었어요. 그래도 제출할까요?`))return;
+  clearTimeout(saveT);
   const r=sec.type==='mc'?gradeMC(sec):gradeCloze(sec); S.results[sec.id]=r; saveProgress();
   const btn=$('.submitbar .btn');btn.disabled=true;btn.textContent='채점 중…';
   const sum=Object.values(S.results).reduce((x,y)=>x+y.score,0); const done=S.secIdx===sections().length-1;
   try{
-    await fb.patch(`results/${S.setId}/${S.resultId}`,{name:S.name,total:sum,totalMax:totalMax(),done,lastAt:now(),...(done?{submittedAt:now()}:{})});
-    await fb.patch(`results/${S.setId}/${S.resultId}/sections`,{[sec.id]:{name:sec.name,score:r.score,total:r.total,detail:r.detail,submittedAt:now()}});
+    await fb.patch(`results/${S.setId}/${S.resultId}`,{name:S.name,total:sum,totalMax:totalMax(),done,lastAt:now(),...(done?{submittedAt:now()}:{}),[`sections/${sec.id}`]:{name:sec.name,score:r.score,total:r.total,detail:r.detail,submittedAt:now()}});
   }catch(e){}
-  if(done) showFinal(); else showSectionResult(sec,r);
+  if(done){clearProgress();untrap();showFinal(S.results,S.resultId);} else showSectionResult(sec,r);
 }
 
-function reviewMC(sec,r){
-  const wrong=sec.questions.map((q,i)=>[q,i]).filter(([q,i])=>!r.detail[i]?.ok);
-  if(!wrong.length) return `<div class="card center" style="margin:0 0 12px">🎉 모두 맞았어요!</div>`;
-  return wrong.map(([q,i])=>{const d=r.detail[i];const ref=q.ref!=null?sec.questions[q.ref]:null;const gp=q.gp||(ref&&ref.gp);
+/* ---- review ---- */
+function reviewMC(sec,detail,onlyIdx){
+  const idxs=onlyIdx||sec.questions.map((q,i)=>i).filter(i=>!detail[i]?.ok);
+  if(!idxs.length) return `<div class="card center" style="margin:0 0 12px">🎉 모두 맞았어요!</div>`;
+  return idxs.map(i=>{const q=sec.questions[i];const d=detail[i]||{};const ref=q.ref!=null?sec.questions[q.ref]:null;const gp=q.gp||(ref&&ref.gp);
     return `<div class="q rv" style="margin-bottom:12px"><div class="qn">${String(i+1).padStart(2,'0')}</div><div class="qbody">
       ${gp?`<details class="refp"><summary>지문 보기</summary><div class="passage">${gp}</div></details>`:''}
       <div class="qt">${q.q}</div>${q.passage?`<div class="passage">${q.passage}</div>`:''}
       <div class="choices">${q.choices.map((c,j)=>`<div class="ch ${j===q.answer?'right':''} ${j===d.a&&j!==q.answer?'wrong':''}"><span class="c">${CIRC[j]}</span><span class="ct">${c}</span></div>`).join('')}</div>
-      <div class="mine">내 답 <span class="x">${d.a!=null?CIRC[d.a]:'미답'}</span> · 정답 <span class="o">${CIRC[q.answer]}</span></div>
+      <div class="mine">내 답 <span class="${d.ok?'o':'x'}">${d.a!=null?CIRC[d.a]:'미답'}</span> · 정답 <span class="o">${CIRC[q.answer]}</span></div>
       ${q.e?`<div class="expl"><b>해설</b> ${q.e}</div>`:''}</div></div>`;}).join('');
 }
-function reviewCloze(sec,r){let k=0;return `<div class="part review-cloze">${sec.parts.map(p=>`<h3>${esc(p.title)}</h3>${p.lines.map(l=>{const html=l.t.replace(/\{\{([^}]+)\}\}/g,()=>{const d=r.detail[k++];return d.ok?`<span class="bk ok">${esc(d.c)}</span>`:`<span class="bk no"><s>${esc(d.a||'　')}</s> ${esc(d.c)}</span>`;});return `<div class="line">${l.s?`<span class="sp">${esc(l.s)}</span>`:l.n?`<span class="sp n">${String(l.n).padStart(2,'0')}</span>`:''}<span class="lt">${html}</span></div>`;}).join('')}`).join('')}</div>`;}
+function reviewCloze(sec,detail){let k=0;return `<div class="part review-cloze">${sec.parts.map(p=>`<h3>${esc(p.title)}</h3>${p.lines.map(l=>{const html=l.t.replace(/\{\{([^}]+)\}\}/g,()=>{const d=detail[k++]||{};return d.ok?`<span class="bk ok">${esc(d.c)}</span>`:`<span class="bk no"><s>${esc(d.a||'　')}</s> ${esc(d.c)}</span>`;});return `<div class="line">${l.s?`<span class="sp">${esc(l.s)}</span>`:l.n?`<span class="sp n">${String(l.n).padStart(2,'0')}</span>`:''}<span class="lt">${html}</span></div>`;}).join('')}`).join('')}</div>`;}
+function grid(detail){return `<div class="grid">${detail.map((d,i)=>`<div class="cell ${d.ok?'ok':'no'}">${i+1}</div>`).join('')}</div>`;}
 
 function showSectionResult(sec,r){
-  render(hdr(1)+`<div class="wrap">${progressBar()}<div class="scorecard"><div class="lab">${esc(sec.name)} 결과</div><div class="big">${r.score}<span>/ ${r.total}</span></div><div class="pct">${Math.round(r.score/r.total*100)}점</div></div>
-  ${sec.type==='mc'?`<div class="grid">${r.detail.map((d,i)=>`<div class="cell ${d.ok?'ok':'no'}">${i+1}</div>`).join('')}</div><h3 class="rvh">오답 풀이</h3>${reviewMC(sec,r)}`:reviewCloze(sec,r)}
+  render(hdr(1)+`<div class="wrap">${progressBar()}<div class="scorecard"><div class="lab">${esc(sec.name)} 결과</div><div class="big">${r.score}<span>/ ${r.total}</span></div><div class="pct">${pct(r.score,r.total)}점</div></div>
+  ${sec.type==='mc'?grid(r.detail)+`<h3 class="rvh">오답 풀이</h3>${reviewMC(sec,r.detail)}`:reviewCloze(sec,r.detail)}
   <div class="submitbar"><button class="btn big" onclick="S.secIdx++;saveProgress();showSection()">다음 섹션 →</button></div></div>`);
 }
-
-function showFinal(){
-  const sum=Object.values(S.results).reduce((x,y)=>x+y.score,0);const max=totalMax();
-  clearProgress();
+function showFinal(results,rid){
+  S.lastResults=results; S.lastRid=rid;
+  const sum=Object.values(results).reduce((x,y)=>x+y.score,0);const max=totalMax();
   const multi=sections().length>1;
+  const wrongN=sections().reduce((a,s)=>a+(s.type==='mc'&&results[s.id]?results[s.id].detail.filter(d=>!d.ok).length:0),0);
   render(hdr()+`<main class="wrap" style="padding-bottom:40px">
-    <div class="scorecard final"><div class="lab">${esc(S.name)} · ${esc(S.set.title)}</div><div class="big">${sum}<span>/ ${max}</span></div><div class="pct">${Math.round(sum/max*100)}점</div></div>
-    ${multi?`<table class="tbl">${sections().map(s=>{const r=S.results[s.id]||{score:0,total:secMax(s)};return `<tr><td>${esc(s.name)}</td><td class="r"><b>${r.score}</b> / ${r.total}</td></tr>`;}).join('')}</table>`:''}
-    ${sections().map(s=>{const r=S.results[s.id];if(!r)return '';return `${multi?`<h3 class="rvh">${esc(s.name)}</h3>`:''}${s.type==='mc'?`<div class="grid">${r.detail.map((d,i)=>`<div class="cell ${d.ok?'ok':'no'}">${i+1}</div>`).join('')}</div><h3 class="rvh">오답 풀이 (${r.detail.filter(d=>!d.ok).length}문항)</h3>${reviewMC(s,r)}`:reviewCloze(s,r)}`;}).join('')}
+    <div class="scorecard final"><div class="lab">${esc(S.name)} · ${esc(S.set.title)}</div><div class="big">${sum}<span>/ ${max}</span></div><div class="pct">${pct(sum,max)}점</div></div>
+    ${wrongN?`<button class="btn" onclick="startRetry()">틀린 문제 다시 풀기 (${wrongN}문항)</button>`:''}
+    ${multi?`<table class="tbl" style="margin-top:14px">${sections().map(s=>{const r=results[s.id]||{score:0,total:secMax(s)};return `<tr><td>${esc(s.name)}</td><td class="r"><b>${r.score}</b> / ${r.total}</td></tr>`;}).join('')}</table>`:''}
+    ${sections().map(s=>{const r=results[s.id];if(!r)return '';return `${multi?`<h3 class="rvh">${esc(s.name)}</h3>`:'<div style="height:14px"></div>'}${s.type==='mc'?grid(r.detail)+`<h3 class="rvh">오답 풀이 (${r.detail.filter(d=>!d.ok).length}문항)</h3>${reviewMC(s,r.detail)}`:reviewCloze(s,r.detail)}`;}).join('')}
     <p class="muted center">결과가 선생님께 전송됐어요. 수고했어요!</p>
-    <a class="btn ghost" href="/">처음으로</a>
+    <div class="btnrow"><a class="btn ghost" href="/">처음으로</a><a class="btn ghost" href="/?v=me">내 기록</a></div>
   </main>`);
+}
+async function showPast(rid){
+  let rec=null; try{rec=await fb.get(`results/${S.setId}/${rid}`);}catch(e){}
+  if(!rec||rec.name!==S.name) return render(`<div class="center"><h2>기록을 찾을 수 없어요</h2><a class="btn ghost" href="/">처음으로</a></div>`);
+  const res={}; sections().forEach(s=>{const x=rec.sections?.[s.id];if(x)res[s.id]={score:x.score,total:x.total,detail:x.detail||[]};});
+  showFinal(res,rid);
+}
+
+/* ---- retry wrong ---- */
+function startRetry(only){
+  const sec=sections().find(s=>s.type==='mc'&&S.lastResults[s.id]&&S.lastResults[s.id].detail.some(d=>!d.ok)); if(!sec) return;
+  const idxs=only||sec.questions.map((q,i)=>i).filter(i=>!S.lastResults[sec.id].detail[i]?.ok);
+  S.retry={sec,idxs,ans:{}};
+  render(hdr(1)+`<div class="wrap"><div class="sechead"><span class="num">↻</span><h2>틀린 문제 다시 풀기</h2><span class="cnt">${idxs.length}문항</span></div>
+    ${idxs.map(i=>{const q=sec.questions[i];const ref=q.ref!=null?sec.questions[q.ref]:null;const gp=q.gp||(ref&&ref.gp);
+      return qCard(q,i,undefined,i+1,`<span class="retrytag">다시 풀기</span>${gp?`<details class="refp" open><summary>지문</summary><div class="passage">${gp}</div></details>`:''}`);}).join('')}
+    <div class="submitbar"><button class="btn big" onclick="submitSection()">다시 채점하기</button></div></div>`);
+  trapBack();
+}
+async function submitRetry(){
+  const {sec,idxs,ans}=S.retry; const miss=idxs.filter(i=>ans[i]==null).length;
+  if(miss&&!confirm(`아직 ${miss}문항을 안 골랐어요. 채점할까요?`))return;
+  const detail=[]; let ok=0; idxs.forEach(i=>{const q=sec.questions[i];const g=ans[i]??null;const o=g===q.answer;if(o)ok++;detail[i]={a:g,ok:o,c:q.answer};});
+  fb.patch(`results/${S.setId}/${S.lastRid}/retries/${Date.now()}`,{at:now(),score:ok,total:idxs.length,wrong:idxs.filter(i=>!detail[i].ok).map(i=>i+1)}).catch(()=>{});
+  const still=idxs.filter(i=>!detail[i].ok);
+  S.retry=null; untrap();
+  render(hdr()+`<main class="wrap" style="padding-bottom:40px"><div class="scorecard"><div class="lab">틀린 문제 다시 풀기 결과</div><div class="big">${ok}<span>/ ${idxs.length}</span></div><div class="pct">${still.length?`${still.length}문항 또 틀렸어요`:'전부 맞았어요!'}</div></div>
+    ${still.length?`<button class="btn" onclick="startRetry(${JSON.stringify(still)})">또 틀린 문제 다시 풀기 (${still.length}문항)</button>`:''}
+    <h3 class="rvh">다시 푼 문제 풀이</h3>${reviewMC(sec,detail,idxs)}
+    <div class="btnrow"><button class="btn ghost" onclick="showFinal(S.lastResults,S.lastRid)">원래 결과로</button><a class="btn ghost" href="/">처음으로</a></div></main>`);
 }
 boot();
 </script>
