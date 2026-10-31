@@ -51,7 +51,7 @@ const me=()=>(ls.get('exam_name')||'').trim();
 const STEPS=['','단어 순서 맞추기','첫 글자 보고 쓰기','핵심 단어 쓰기','절반 빈칸 쓰기','문장 통째로 쓰기'];
 const SESSION=6, MASTER=3;
 const M={id:null,set:null,toks:[],prog:{},queue:[],cur:null,sess:{done:0,pass:0,fail:0,seen:{}},retried:{}};
-function norm(s){return String(s||'').toLowerCase().replace(/[’‘`]/g,"'").replace(/[“”]/g,'"').replace(/[.,!?;:"()]/g,'').trim();}
+function norm(s){return String(s||'').toLowerCase().replace(/[’‘`]/g,"'").replace(/[“”]/g,'"').replace(/[.,!?;:"()]/g,'').replace(/[\u2460-\u24ff\u3400-\u9fff]/g,'').trim();}
 function render(h){app.innerHTML=h;window.scrollTo(0,0);}
 const hdr=()=>`<header class="top"><div class="lft"><a class="back" href="${M.set?`/exam?g=${encodeURIComponent(M.set.grade)}&b=${encodeURIComponent(M.set.book)}`:'/'}">← 뒤로</a><a class="brand sm" href="/">TERRY'S <span>EXAM</span></a></div><div class="who">${esc(me())}</div></header>`;
 
@@ -161,8 +161,8 @@ function checkBlanks(){
 }
 function checkFull(){
   const toks=M.toks[M.cur.i]; const got=norm($('#full').value).split(/\s+/).filter(Boolean);
-  const want=toks.map(t=>t.alts.map(norm)); let ok=got.length===want.length;
-  const marked=want.map((alts,k)=>{const g=got[k];const good=g!=null&&alts.includes(g);if(!good)ok=false;return good?esc(toks[k].w):`<b>${esc(toks[k].w)}</b>`;});
+  const tk=toks.filter(t=>norm(t.w)!=='');const want=tk.map(t=>t.alts.map(norm)); let ok=got.length===want.length;
+  const marked=want.map((alts,k)=>{const g=got[k];const good=g!=null&&alts.includes(g);if(!good)ok=false;return good?esc(tk[k].w):`<b>${esc(tk[k].w)}</b>`;});
   result(ok,marked.join(' '));
 }
 function flash(m){$('#fb').innerHTML=`<div class="fb no">${m}</div>`;}
