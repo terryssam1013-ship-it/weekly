@@ -2,7 +2,45 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "headers": [
-    { "source": "/sets/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-    { "source": "/(.*)\\.html", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+    {
+      "source": "/sets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)\\.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "exam.terrys.kr"
+        }
+      ],
+      "destination": "/exam/index.html"
+    },
+    {
+      "source": "/admin",
+      "has": [
+        {
+          "type": "host",
+          "value": "exam.terrys.kr"
+        }
+      ],
+      "destination": "/exam/admin.html"
+    }
   ]
 }
