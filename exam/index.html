@@ -24,6 +24,8 @@
 .refp{margin:8px 0}.refp summary{font-size:13px;color:var(--brand);cursor:pointer;font-weight:700}
 .top .right{display:flex;gap:6px;align-items:center}
 .top .who{cursor:pointer}
+.top .lft{display:flex;align-items:center;gap:8px}
+.top .back{color:#fff;font-size:15px;font-weight:800;background:rgba(255,255,255,.18);padding:5px 11px;border-radius:999px;white-space:nowrap}
 .setcard{display:flex;align-items:center;gap:10px}
 .setcard .info{flex:1;min-width:0}
 .st-badge{flex:none;font-size:12.5px;font-weight:800;padding:5px 10px;border-radius:999px;white-space:nowrap}
@@ -64,7 +66,8 @@ function trapBack(){try{history.pushState({w:1},'');window.onpopstate=()=>{histo
 function untrap(){window.onpopstate=null;}
 function me(){return (ls.get(LSN)||'').trim();}
 const pct=(a,b)=>b?Math.round(a/b*100):0;
-const hdr=(sticky)=>`<header class="top ${sticky?'sticky':''}"><a class="brand ${sticky?'sm':''}" href="/">${BRAND}</a><div class="right">${me()?`<span class="who" onclick="${sticky?'':'logout()'}">${esc(me())}${sticky?'':' · 변경'}</span>`:''}</div></header>`;
+function backUrl(){const u=new URL(location.href),p=u.searchParams;if(p.get('s')){const g=S.set&&S.set.grade,b=S.set&&S.set.book;return g&&b?`?g=${encodeURIComponent(g)}&b=${encodeURIComponent(b)}`:'/';}if(p.get('b'))return `?g=${encodeURIComponent(p.get('g')||'')}`;if(p.get('g')||p.get('v'))return '/';return '';}
+const hdr=(sticky)=>`<header class="top ${sticky?'sticky':''}"><div class="lft">${!sticky&&backUrl()?`<a class="back" href="${backUrl()}">← 뒤로</a>`:''}<a class="brand ${sticky?'sm':''}" href="/">${BRAND}</a></div><div class="right">${me()?`<span class="who" onclick="${sticky?'':'logout()'}">${esc(me())}${sticky?'':' · 변경'}</span>`:''}</div></header>`;
 function logout(){if(confirm('이름을 바꿀까요?')){ls.del(LSN);location.href='/';}}
 
 /* ---- my records (all sets) ---- */
