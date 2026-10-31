@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>본문 외우기 · TERRY'S EXAM</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+:root{--brand:#1B5E3B;--accent:#f5b301}
+.top .lft{display:flex;align-items:center;gap:8px}
+.top .back{color:#fff;font-size:15px;font-weight:800;background:rgba(255,255,255,.18);padding:5px 11px;border-radius:999px;white-space:nowrap}
+.bar{height:10px;background:#e3e7ee;border-radius:5px;overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;background:var(--ok)}
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:6px;margin:12px 0}
+.chip{height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;border:0}
+.c0{background:#eceef3;color:#9aa0ab}.c1{background:var(--nobg);color:var(--no)}.c2{background:#fff1d6;color:#b45309}.c3{background:var(--okbg);color:var(--ok)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.legend span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;background:var(--c)}
+.lv{display:inline-flex;gap:4px;margin:2px 0 10px}
+.lv i{width:26px;height:7px;border-radius:4px;background:#e3e7ee}.lv i.on{background:var(--accent)}.lv i.done{background:var(--ok)}
+.ctx{font-size:14px;color:#9aa0ab;font-family:Georgia,serif;margin-bottom:8px;line-height:1.6}
+.sent{font-family:Georgia,"Times New Roman",serif;font-size:18px;line-height:2.1}
+.sent .w{margin-right:5px}
+.sent input{font:inherit;font-size:17px;border:0;border-bottom:2px solid var(--brand);background:#eef7f1;border-radius:6px 6px 0 0;padding:0 5px;margin:0 4px 0 0;text-align:center;outline:none}
+.sent input.ok{background:var(--okbg);border-color:var(--ok)}.sent input.no{background:var(--nobg);border-color:var(--no)}
+.ansline{min-height:52px;border:2px dashed #cfd5e0;border-radius:12px;padding:8px;font-family:Georgia,serif;font-size:17px;line-height:2;margin-bottom:12px}
+.tile{display:inline-block;padding:4px 10px;margin:3px;border-radius:9px;background:#fff;border:1.5px solid var(--line);font-family:Georgia,serif;font-size:17px;cursor:pointer;user-select:none}
+.tile.used{visibility:hidden}
+.ansline .tile{background:#eef7f1;border-color:#b9dcc6}
+textarea.full{width:100%;min-height:120px;font-family:Georgia,serif;font-size:17px;line-height:1.7;padding:12px;border:2px solid var(--line);border-radius:12px;outline:none}
+textarea.full:focus{border-color:var(--brand)}
+.fb{border-radius:12px;padding:12px 14px;margin-top:12px;font-size:15px;line-height:1.6}
+.fb.ok{background:var(--okbg);color:#14532d}.fb.no{background:var(--nobg);color:#7f1d1d}
+.fb .right{font-family:Georgia,serif;font-size:16.5px;color:#1b1d24;margin-top:6px}
+.fb .right b{color:var(--no)}
+.stepname{font-weight:800;color:var(--brand);font-size:15px}
+.cnt2{font-size:13px;color:var(--muted)}
+.sumrow{display:flex;justify-content:space-around;text-align:center;margin:10px 0}
+.sumrow b{display:block;font-size:26px;color:var(--brand)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="/config.js"></script>
+<script>
+const $=s=>document.querySelector(s); const app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fb={url:p=>`${CONFIG.dbUrl}/exam/${p}.json`,get:p=>fetch(fb.url(p)).then(r=>r.json()),patch:(p,v)=>fetch(fb.url(p),{method:'PATCH',body:JSON.stringify(v)}).then(r=>r.json())};
+const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+const me=()=>(ls.get('exam_name')||'').trim();
+const STEPS=['','단어 순서 맞추기','첫 글자 보고 쓰기','핵심 단어 쓰기','절반 빈칸 쓰기','문장 통째로 쓰기'];
+const SESSION=6, MASTER=3;
+const M={id:null,set:null,toks:[],prog:{},queue:[],cur:null,sess:{done:0,pass:0,fail:0,seen:{}},retried:{}};
+function norm(s){return String(s||'').toLowerCase().replace(/[’‘`]/g,"'").replace(/[“”]/g,'"').replace(/[.,!?;:"()]/g,'').trim();}
+function render(h){app.innerHTML=h;window.scrollTo(0,0);}
+const hdr=()=>`<header class="top"><div class="lft"><a class="back" href="${M.set?`/exam?g=${encodeURIComponent(M.set.grade)}&b=${encodeURIComponent(M.set.book)}`:'/'}">← 뒤로</a><a class="brand sm" href="/">TERRY'S <span>EXAM</span></a></div><div class="who">${esc(me())}</div></header>`;
+
+function tokenize(t){
+  return t.split(/\s+/).filter(Boolean).map(raw=>{
+    const m=raw.match(/\{\{([^}]+)\}\}/);
+    if(!m) return {w:raw,key:false,alts:[raw]};
+    const alts=m[1].split('|'); const w=raw.replace(m[0],alts[0]);
+    return {w,key:true,alts:alts.map(a=>raw.replace(m[0],a))};
+  });
+}
+function blanksFor(toks,lv){
+  const isWord=t=>/[A-Za-z]{2,}/.test(t.w);
+  let keys=toks.map((t,i)=>t.key?i:-1).filter(i=>i>=0);
+  if(!keys.length){keys=toks.map((t,i)=>[i,t.w.replace(/[^A-Za-z]/g,'').length]).sort((a,b)=>b[1]-a[1]).slice(0,2).map(x=>x[0]);}
+  if(lv<=3) return keys;
+  const s=new Set(keys); toks.forEach((t,i)=>{if(isWord(t)&&i%2===1)s.add(i);}); return [...s].sort((a,b)=>a-b);
+}
+function cls(p){if(!p||!p.lv)return 'c0';if(p.ok)return 'c3';if(p.w||p.lv<=2)return 'c1';return 'c2';}
+function stats(){const n=M.toks.length;let ok=0,st=0;for(let i=0;i<n;i++){const p=M.prog[i];if(p&&p.lv)st++;if(p&&p.ok)ok++;}return {n,ok,st,pct:n?Math.round(ok/n*100):0};}
+
+async function boot(){
+  if(!me()){location.href='/';return;}
+  M.id=new URL(location.href).searchParams.get('m');
+  render(`<div class="center"><div class="spinner"></div></div>`);
+  try{M.set=await fb.get(`memoSets/${M.id}`);}catch(e){}
+  if(!M.set) return render(`<div class="center"><h2>본문을 찾을 수 없어요</h2><a class="btn ghost" href="/">처음으로</a></div>`);
+  M.toks=M.set.sents.map(tokenize);
+  let local={},remote={};
+  try{local=JSON.parse(ls.get('memo_'+M.id)||'{}');}catch(e){}
+  try{remote=(await fb.get(`memoProg/${M.id}/${encodeURIComponent(me())}`))||{};}catch(e){}
+  const rs=remote.s||{}, lsS=local.s||{};
+  M.prog={}; const ids=new Set([...Object.keys(rs),...Object.keys(lsS)]);
+  ids.forEach(k=>{const a=rs[k],b=lsS[k];M.prog[k]=(!a)?b:(!b)?a:((b.t||0)>(a.t||0)?b:a);});
+  overview();
+}
+function overview(){
+  const s=stats(); const due=M.toks.map((_,i)=>i).filter(i=>!M.prog[i]?.ok).length;
+  render(hdr()+`<main class="wrap" style="padding-bottom:40px"><div class="card">
+    <div class="tag">본문 외우기</div><h1 class="title" style="margin-bottom:4px">${esc(M.set.title)}</h1><div class="muted small">${esc(M.set.subtitle||'')}</div>
+    <div class="bar"><i style="width:${s.pct}%"></i></div>
+    <div class="cnt2"><b style="color:var(--ok)">${s.ok}</b> / ${s.n}문장 암기 완료 (${s.pct}%) · 시작한 문장 ${s.st}개</div>
+    <button class="btn big" onclick="startSession()">${due?`오늘 학습 시작 (${Math.min(SESSION,due)}문장)`:'복습하기 (전체 완료!)'}</button>
+    <p class="muted small" style="margin:10px 0 0">한 문장씩 5단계로 올라가요: ① 단어 순서 → ② 첫 글자 힌트 → ③ 핵심 단어 → ④ 절반 빈칸 → ⑤ 통째로 쓰기. 5단계를 서로 다른 날 ${MASTER}번 통과하면 <b style="color:var(--ok)">암기 완료</b>. 틀린 문장은 다음에 먼저 나와요.</p>
+  </div>
+  <div class="legend" style="margin-top:14px"><span style="--c:#eceef3">시작 전</span><span style="--c:var(--nobg)">다시 외우기</span><span style="--c:#fff1d6">외우는 중</span><span style="--c:var(--okbg)">암기 완료</span></div>
+  <div class="chips">${M.toks.map((_,i)=>`<button class="chip ${cls(M.prog[i])}" onclick="startSession([${i}])" title="${i+1}번 문장">${i+1}</button>`).join('')}</div>
+  <p class="muted small">번호를 누르면 그 문장만 바로 연습할 수 있어요.</p></main>`);
+}
+function startSession(only){
+  const n=M.toks.length; let q;
+  if(only) q=only;
+  else{
+    const notOk=[...Array(n).keys()].filter(i=>!M.prog[i]?.ok);
+    const wrong=notOk.filter(i=>M.prog[i]?.w);
+    const started=notOk.filter(i=>!M.prog[i]?.w&&M.prog[i]?.lv);
+    const fresh=notOk.filter(i=>!M.prog[i]?.lv);
+    q=[...wrong,...started,...fresh].slice(0,SESSION);
+    if(!q.length) q=[...Array(n).keys()].sort(()=>Math.random()-.5).slice(0,SESSION);
+  }
+  M.queue=q.slice(); M.sess={done:0,pass:0,fail:0,seen:{},list:q.slice()}; M.retried={};
+  next();
+}
+function next(){
+  if(!M.queue.length) return summary();
+  const i=M.queue[0]; const p=M.prog[i]||{}; M.cur={i,lv:Math.max(1,Math.min(5,p.lv||1))};
+  showStep();
+}
+function showStep(){
+  const {i,lv}=M.cur; const toks=M.toks[i];
+  const ctx=i>0?`<div class="ctx">… ${esc(M.toks[i-1].map(t=>t.w).join(' '))}</div>`:'';
+  let body='';
+  if(lv===1){
+    const order=toks.map((t,k)=>k).sort(()=>Math.random()-.5);
+    M.cur.order=order; M.cur.picked=[];
+    body=`<div class="ansline" id="ansline"></div><div id="tiles">${order.map((k,j)=>`<span class="tile" id="t${j}" onclick="pickTile(${j})">${esc(toks[k].w)}</span>`).join('')}</div>
+    <div class="row" style="display:flex;gap:8px"><button class="btn ghost" onclick="showStep()">다시 섞기</button><button class="btn" onclick="checkTiles()">확인</button></div>`;
+  } else if(lv<=4){
+    const bl=new Set(blanksFor(toks,lv)); M.cur.bl=[...bl];
+    body=`<div class="sent">${toks.map((t,k)=>{if(!bl.has(k))return `<span class="w">${esc(t.w)}</span>`;const core=t.w.replace(/[^A-Za-z']/g,'');const hint=lv===2?core[0]:'';const pre=t.w.match(/^[^A-Za-z']*/)[0],post=t.w.match(/[^A-Za-z']*$/)[0];
+      return `${esc(pre)}<input data-k="${k}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${hint?esc(hint)+'…':''}" style="width:${Math.max(4,core.length*0.75+1.5)}ch">${esc(post)}`;}).join(' ')}</div>
+    <button class="btn" onclick="checkBlanks()">확인</button>`;
+  } else {
+    body=`<textarea class="full" id="full" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="이 문장을 처음부터 끝까지 써 보세요"></textarea><button class="btn" onclick="checkFull()">확인</button>`;
+  }
+  render(hdr()+`<main class="wrap" style="padding-bottom:40px">
+    <div class="cnt2">${M.sess.done+1}번째 · 남은 문장 ${M.queue.length} · <b>${i+1}번 문장</b></div>
+    <div class="card" style="margin-top:8px"><div class="stepname">${lv}단계 · ${STEPS[lv]}</div>
+    <div class="lv">${[1,2,3,4,5].map(x=>`<i class="${x<lv?'done':x===lv?'on':''}"></i>`).join('')}</div>
+    ${ctx}${body}<div id="fb"></div></div>
+    <a class="btn ghost" href="javascript:overview()" style="text-align:center">그만하고 목록으로</a></main>`);
+  const f=document.querySelector('.sent input,#full'); if(f) f.focus();
+  document.querySelectorAll('.sent input').forEach((el,ix,arr)=>el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(arr[ix+1])arr[ix+1].focus();else checkBlanks();}}));
+}
+function pickTile(j){const el=$('#t'+j);if(el.classList.contains('used'))return;el.classList.add('used');M.cur.picked.push(j);drawAns();}
+function unpick(pos){const j=M.cur.picked.splice(pos,1)[0];$('#t'+j).classList.remove('used');drawAns();}
+function drawAns(){const toks=M.toks[M.cur.i];$('#ansline').innerHTML=M.cur.picked.map((j,pos)=>`<span class="tile" onclick="unpick(${pos})">${esc(toks[M.cur.order[j]].w)}</span>`).join('');}
+function checkTiles(){
+  const toks=M.toks[M.cur.i]; if(M.cur.picked.length<toks.length) return flash('단어를 모두 놓아 주세요.');
+  const got=M.cur.picked.map(j=>norm(toks[M.cur.order[j]].w)).join(' '); const want=toks.map(t=>norm(t.w)).join(' ');
+  result(got===want,'');
+}
+function checkBlanks(){
+  const toks=M.toks[M.cur.i]; let all=true;
+  document.querySelectorAll('.sent input').forEach(el=>{const t=toks[+el.dataset.k];const ok=t.alts.some(a=>norm(a)===norm(el.value));el.classList.add(ok?'ok':'no');if(!ok)all=false;el.disabled=true;});
+  result(all,'');
+}
+function checkFull(){
+  const toks=M.toks[M.cur.i]; const got=norm($('#full').value).split(/\s+/).filter(Boolean);
+  const want=toks.map(t=>t.alts.map(norm)); let ok=got.length===want.length;
+  const marked=want.map((alts,k)=>{const g=got[k];const good=g!=null&&alts.includes(g);if(!good)ok=false;return good?esc(toks[k].w):`<b>${esc(toks[k].w)}</b>`;});
+  result(ok,marked.join(' '));
+}
+function flash(m){$('#fb').innerHTML=`<div class="fb no">${m}</div>`;}
+function save(i){
+  const p=M.prog[i]; p.t=Date.now();
+  ls.set('memo_'+M.id,JSON.stringify({s:M.prog}));
+  const s=stats();
+  fb.patch(`memoProg/${M.id}/${encodeURIComponent(me())}`,{name:me(),[`s/${i}`]:p,pct:s.pct,mastered:s.ok,started:s.st,total:s.n,updatedAt:new Date().toISOString()}).catch(()=>{});
+}
+function result(ok,marked){
+  const {i,lv}=M.cur; const toks=M.toks[i]; const p=M.prog[i]=M.prog[i]||{lv:1,st:0};
+  const right=marked||toks.map(t=>esc(t.w)).join(' ');
+  if(ok){
+    let msg;
+    if(lv<5){p.lv=lv+1;msg=`통과! ${lv+1}단계로 올라가요.`;}
+    else{const today=new Date().toDateString(); if(p.day!==today){p.st=(p.st||0)+1;p.day=today;} p.w=false; if(p.st>=MASTER)p.ok=true;
+      msg=p.ok?'🎉 이 문장 암기 완료!':`5단계 통과 (${p.st}/${MASTER}). 다른 날 한 번 더 통과하면 완료에 가까워져요.`;}
+    save(i);
+    $('#fb').innerHTML=`<div class="fb ok"><b>${msg}</b></div><button class="btn" id="go">${lv<5?'다음 단계 →':'다음 문장 →'}</button>`;
+    $('#go').onclick=()=>{ if(lv<5){M.cur.lv=lv+1;showStep();} else {M.queue.shift();M.sess.done++;M.sess.pass++;next();} };
+  } else {
+    p.lv=Math.max(1,lv-1); p.st=0; p.w=true; p.ok=false; save(i);
+    $('#fb').innerHTML=`<div class="fb no"><b>아쉬워요. ${lv>1?`${lv-1}단계로 내려가서 다시 해요.`:'다시 해 봐요.'}</b><div class="right">${right}</div></div><button class="btn" id="go">계속 →</button>`;
+    $('#go').onclick=()=>{ M.queue.shift(); if(!M.retried[i]){M.retried[i]=1;M.queue.push(i);} else {M.sess.done++;M.sess.fail++;} next(); };
+  }
+  document.querySelectorAll('.card .btn').forEach(b=>{if(b.id!=='go')b.style.display='none';});
+  $('#go')?.focus();
+}
+function summary(){
+  const s=stats();
+  render(hdr()+`<main class="wrap"><div class="card center" style="margin-top:16px"><h2 style="margin:0 0 6px">오늘 학습 끝!</h2>
+  <div class="sumrow"><div><b>${M.sess.list.length}</b><span class="muted small">학습한 문장</span></div><div><b>${s.ok}</b><span class="muted small">암기 완료</span></div><div><b>${s.pct}%</b><span class="muted small">전체 진도</span></div></div>
+  <div class="bar"><i style="width:${s.pct}%"></i></div>
+  <button class="btn" onclick="startSession()">계속하기</button><button class="btn ghost" onclick="overview()">문장 목록 보기</button></div></main>`);
+}
+boot();
+</script>
+</body>
+</html>
