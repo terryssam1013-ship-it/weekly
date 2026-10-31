@@ -34,6 +34,11 @@
 .st-badge.new{background:#f1f3f7;color:#8a8f9c}
 .setcard.isdone{background:#f7fbf8}
 .cath{font-weight:800;color:var(--brand);font-size:15px;margin:22px 0 8px}
+.gcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.gcard .t{font-weight:700;font-size:17px;margin-bottom:8px}
+.gbtns{display:flex;gap:8px}
+.gbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:12px;border:2px solid var(--brand);color:var(--brand);font-weight:800;font-size:16px;background:#fff}
+.gbtn .st-badge{font-size:11.5px}
 .tabs2{display:flex;gap:6px;margin:4px 0 14px}
 .tabs2 a{padding:8px 14px;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:14px}
 .tabs2 a.on{background:var(--brand);color:#fff;border-color:var(--brand)}
@@ -141,8 +146,9 @@ async function showHome(g,b,v){
   const list=inG.filter(([k,m])=>(m.book||'기타')===b).sort((x,y)=>(x[1].order??999)-(y[1].order??999)||(x[1].createdAt||'').localeCompare(y[1].createdAt||''));
   const mp={};await Promise.all(list.filter(([k,m])=>m.type==='memo').map(async([k])=>{try{mp[k]=await fb.get(`memoProg/${k}/${encodeURIComponent(me())}`);}catch(e){}}));
   const mcard=([id,m])=>{const p=mp[id];const pct=p?p.pct||0:null;return `<a class="setcard ${pct===100?'isdone':''}" href="/exam/memo?m=${encodeURIComponent(id)}"><div class="info"><div class="t">${esc(m.title||id)}</div><div class="st">${esc(m.subtitle||'')}</div></div><span class="st-badge ${pct===100?'done':pct!=null?'ing':'new'}">${pct==null?'시작 전':pct===100?'✔ 암기 완료':'암기 '+pct+'%'}</span></a>`;};
+  const rows=L=>{const seen=new Set();return L.map(x=>{const m=x[1];if(m.type==='memo')return mcard(x);if(!m.group)return card(x);if(seen.has(m.group))return '';seen.add(m.group);const G=L.filter(y=>y[1].group===m.group);return `<div class="gcard"><div class="t">${esc(m.groupTitle||m.title)}</div><div class="gbtns">${G.map(([id,g])=>`<a class="gbtn" href="?s=${encodeURIComponent(id)}">${esc(g.kind||g.title)}${badge(mine[id])}</a>`).join('')}</div></div>`;}).join('');};
   const CATS=['본문외우기','문법','기출유형'];const catOf=m=>m.type==='memo'?'본문외우기':(m.cat||'기타');const cats=[...CATS,...new Set(list.map(([k,m])=>catOf(m)).filter(c=>!CATS.includes(c)))];
-  const grouped=cats.map(c=>{const L=list.filter(([k,m])=>catOf(m)===c);return L.length?`<div class="cath">${c==='본문외우기'?'📖 본문 외우기':c==='문법'?'✏️ 문법':c==='기출유형'?'📝 기출유형':esc(c)}</div>`+L.map(x=>x[1].type==='memo'?mcard(x):card(x)).join(''):'';}).join('')||'<p class="muted">시험지가 없어요.</p>';
+  const grouped=cats.map(c=>{const L=list.filter(([k,m])=>catOf(m)===c);return L.length?`<div class="cath">${c==='본문외우기'?'📖 본문 외우기':c==='문법'?'✏️ 문법':c==='기출유형'?'📝 기출유형':esc(c)}</div>`+rows(L):'';}).join('')||'<p class="muted">시험지가 없어요.</p>';
   render(hdr()+`<main class="wrap"><div class="crumb"><a href="/">학년</a> › <a href="?g=${encodeURIComponent(g)}">${esc(g)}</a> › ${esc(b)}</div><h2 class="h">${esc(b)}</h2>
     ${grouped}</main>`);
 }
