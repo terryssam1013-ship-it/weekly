@@ -165,17 +165,20 @@ function itemStats(rs,secs){
   }).join('')}</details>`;
 }
 function showDetail(id,keep){
-  A.sel=id; const r=A.results[id]; const box=$('#detail'); if(!r||!box)return;
+  A.sel=id; if(!keep)A.rvSel=null; const r=A.results[id]; const box=$('#detail'); if(!r||!box)return;
   const secs=A.set?.sections||[];
   box.innerHTML=`<div class="detail"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(r.name)} · ${r.total||0}/${r.totalMax} (${r.totalMax?Math.round(r.total/r.totalMax*100):0}점)</h3><button class="btn sm gray" onclick="A.sel=null;$('#detail').innerHTML=''">닫기</button></div>
   ${secs.map(s=>{const x=r.sections?.[s.id]; if(!x)return `<h4 style="margin:12px 0 4px">${esc(s.name)} <span class="muted small">미제출</span></h4>`;
-    if(s.type==='mc'){return `<h4 style="margin:12px 0 4px">${esc(s.name)} ${x.score}/${x.total}</h4><div class="wrongs">${x.detail.map((d,i)=>`<div class="cell ${d.ok?'ok':'no'}" title="${d.ok?'정답':'학생 '+(d.a!=null?CIRC[d.a]:'미답')+' / 정답 '+CIRC[d.c]}">${i+1}</div>`).join('')}</div>
-      ${x.detail.some(d=>!d.ok)?`<div class="ans">${x.detail.map((d,i)=>d.ok?'':`${i+1}번: 학생 ${d.a!=null?CIRC[d.a]:'미답'} → 정답 ${CIRC[d.c]}`).filter(Boolean).join(' · ')}</div>`:''}`;}
+    if(s.type==='mc'){return `<h4 style="margin:12px 0 4px">${esc(s.name)} ${x.score}/${x.total}</h4><div class="wrongs">${x.detail.map((d,i)=>`<div class="cell ${d.ok?'ok':'no'}" style="cursor:pointer" onclick="selRv('${s.id}',${i})" title="${d.ok?'정답':'학생 '+(d.a!=null?CIRC[d.a]:'미답')+' / 정답 '+CIRC[d.c]}">${i+1}</div>`).join('')}</div>
+      ${x.detail.some(d=>!d.ok)?`<div class="ans">${x.detail.map((d,i)=>d.ok?'':`${i+1}번: 학생 ${d.a!=null?CIRC[d.a]:'미답'} → 정답 ${CIRC[d.c]}`).filter(Boolean).join(' · ')}</div>`:''}${A.rvSel&&A.rvSel.s===s.id?rvBox(s,A.rvSel.i,x.detail[A.rvSel.i]||{},true):''}${x.detail.some(d=>!d.ok)?`<details class="review" open style="margin-top:8px"><summary>오답 풀이 (${x.detail.filter(d=>!d.ok).length}문항) · 번호를 누르면 그 문제가 열려요</summary>${x.detail.map((d,i)=>d.ok?'':rvBox(s,i,d)).join('')}</details>`:''}`;}
     const wrong=x.detail.filter(d=>!d.ok);
     return `<h4 style="margin:12px 0 4px">${esc(s.name)} ${x.score}/${x.total}</h4>${wrong.length?`<div class="wrongs">${wrong.map(d=>`<span class="bk no"><s>${esc(d.a||'　')}</s> ${esc(d.c)}</span>`).join('')}</div>`:'<div class="ans">모두 정답</div>'}`;
   }).join('')}</div>`;
   if(!keep) box.scrollIntoView({behavior:'smooth',block:'start'});
 }
+function selRv(sid,i){A.rvSel={s:sid,i};showDetail(A.sel,true);setTimeout(()=>document.getElementById('rvsel')?.scrollIntoView({behavior:'smooth',block:'center'}),50);}
+function rvBox(s,i,d,sel){const q=s.questions[i];if(!q)return '';const ref=q.ref!=null?s.questions[q.ref]:null;const gp=q.gp||(ref&&ref.gp);
+  return `<div class="q rv" ${sel?'id="rvsel" style="border:2px solid var(--brand);border-radius:12px;padding:12px;margin:10px 0"':'style="margin:4px 0"'}><div class="qn">${String(i+1).padStart(2,'0')}</div><div class="qbody">${gp?`<details><summary class="small" style="color:var(--brand);cursor:pointer;font-weight:700">지문 보기</summary><div class="passage">${gp}</div></details>`:''}<div class="qt">${q.q}</div>${q.passage?`<div class="passage">${q.passage}</div>`:''}<div class="choices">${q.choices.map((c,j)=>`<div class="ch ${j===q.answer?'right':''} ${j===d.a&&j!==q.answer?'wrong':''}"><span class="c">${CIRC[j]}</span><span class="ct">${c}</span></div>`).join('')}</div><div class="ans" style="margin-top:6px">학생 답 <b style="color:${d.ok?'var(--ok)':'var(--no)'}">${d.a!=null?CIRC[d.a]:'미답'}</b> · 정답 <b style="color:var(--ok)">${CIRC[q.answer]}</b>${sel?` <button class="btn sm gray" style="margin-left:8px" onclick="A.rvSel=null;showDetail(A.sel,true)">닫기</button>`:''}</div>${q.e?`<div class="ans" style="background:#fff8e1;border-radius:8px;padding:8px 10px;margin-top:6px;color:#5a4500"><b>해설</b> ${q.e}</div>`:''}</div></div>`;}
 async function delResult(id,name){ if(!confirm(`${name} 기록을 삭제할까요?`))return; await fb.del(`results/${A.setId}/${id}`); toast('삭제했어요'); }
 function downloadCSV(){
   const secs=A.set?.sections||[]; const rs=rows();
