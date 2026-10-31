@@ -33,6 +33,7 @@
 .st-badge.ing{background:#fff4df;color:#b45309}
 .st-badge.new{background:#f1f3f7;color:#8a8f9c}
 .setcard.isdone{background:#f7fbf8}
+.cath{font-weight:800;color:var(--brand);font-size:15px;margin:22px 0 8px}
 .tabs2{display:flex;gap:6px;margin:4px 0 14px}
 .tabs2 a{padding:8px 14px;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:14px}
 .tabs2 a.on{background:var(--brand);color:#fff;border-color:var(--brand)}
@@ -129,17 +130,21 @@ async function showHome(g,b,v){
       ${ids.length?ids.sort((a,b)=>((mine[b].done?.submittedAt||mine[b].ing?.lastAt||'')).localeCompare(mine[a].done?.submittedAt||mine[a].ing?.lastAt||'')).map(id=>card([id,meta[id]])).join(''):'<p class="muted">아직 푼 시험지가 없어요.</p>'}</main>`);
   }
   if(!g){
-    return render(hdr()+`<main class="wrap">${tabs}<h2 class="h">학년을 선택하세요</h2><div class="grades">${GRADES.map(x=>{const inG=items.filter(([k,m])=>m.grade===x);const d=inG.filter(([k])=>mine[k]?.done).length;return `<a class="grade" href="?g=${encodeURIComponent(x)}">${x}<small>${inG.length?`${d} / ${inG.length} 완료`:'준비 중'}</small></a>`;}).join('')}</div></main>`);
+    return render(hdr()+`<main class="wrap">${tabs}<h2 class="h">학년을 선택하세요</h2><div class="grades">${GRADES.map(x=>{const inG=items.filter(([k,m])=>m.grade===x&&m.type!=='memo');const d=inG.filter(([k])=>mine[k]?.done).length;return `<a class="grade" href="?g=${encodeURIComponent(x)}">${x}<small>${inG.length?`${d} / ${inG.length} 완료`:'준비 중'}</small></a>`;}).join('')}</div></main>`);
   }
   const inG=items.filter(([k,m])=>m.grade===g);
   const books=[...new Set(inG.map(([k,m])=>m.book||'기타'))];
   if(!b){
     return render(hdr()+`<main class="wrap"><div class="crumb"><a href="/">학년</a> › ${esc(g)}</div><h2 class="h">${esc(g)} — 교재 선택</h2>
-      ${books.length?books.map(x=>{const L=inG.filter(([k,m])=>(m.book||'기타')===x);const d=L.filter(([k])=>mine[k]?.done).length;return `<a class="setcard" href="?g=${encodeURIComponent(g)}&b=${encodeURIComponent(x)}"><div class="info"><div class="t">${esc(x)}</div><div class="st">시험지 ${L.length}개</div></div><span class="st-badge ${d===L.length?'done':d?'ing':'new'}">${d} / ${L.length} 완료</span></a>`;}).join(''):'<p class="muted">아직 등록된 시험지가 없어요.</p>'}</main>`);
+      ${books.length?books.map(x=>{const L=inG.filter(([k,m])=>(m.book||'기타')===x&&m.type!=='memo');const d=L.filter(([k])=>mine[k]?.done).length;return `<a class="setcard" href="?g=${encodeURIComponent(g)}&b=${encodeURIComponent(x)}"><div class="info"><div class="t">${esc(x)}</div><div class="st">시험지 ${L.length}개</div></div><span class="st-badge ${d===L.length?'done':d?'ing':'new'}">${d} / ${L.length} 완료</span></a>`;}).join(''):'<p class="muted">아직 등록된 시험지가 없어요.</p>'}</main>`);
   }
   const list=inG.filter(([k,m])=>(m.book||'기타')===b).sort((x,y)=>(x[1].order??999)-(y[1].order??999)||(x[1].createdAt||'').localeCompare(y[1].createdAt||''));
+  const mp={};await Promise.all(list.filter(([k,m])=>m.type==='memo').map(async([k])=>{try{mp[k]=await fb.get(`memoProg/${k}/${encodeURIComponent(me())}`);}catch(e){}}));
+  const mcard=([id,m])=>{const p=mp[id];const pct=p?p.pct||0:null;return `<a class="setcard ${pct===100?'isdone':''}" href="/exam/memo?m=${encodeURIComponent(id)}"><div class="info"><div class="t">${esc(m.title||id)}</div><div class="st">${esc(m.subtitle||'')}</div></div><span class="st-badge ${pct===100?'done':pct!=null?'ing':'new'}">${pct==null?'시작 전':pct===100?'✔ 암기 완료':'암기 '+pct+'%'}</span></a>`;};
+  const CATS=['본문외우기','문법','기출유형'];const catOf=m=>m.type==='memo'?'본문외우기':(m.cat||'기타');const cats=[...CATS,...new Set(list.map(([k,m])=>catOf(m)).filter(c=>!CATS.includes(c)))];
+  const grouped=cats.map(c=>{const L=list.filter(([k,m])=>catOf(m)===c);return L.length?`<div class="cath">${c==='본문외우기'?'📖 본문 외우기':c==='문법'?'✏️ 문법':c==='기출유형'?'📝 기출유형':esc(c)}</div>`+L.map(x=>x[1].type==='memo'?mcard(x):card(x)).join(''):'';}).join('')||'<p class="muted">시험지가 없어요.</p>';
   render(hdr()+`<main class="wrap"><div class="crumb"><a href="/">학년</a> › <a href="?g=${encodeURIComponent(g)}">${esc(g)}</a> › ${esc(b)}</div><h2 class="h">${esc(b)}</h2>
-    ${list.map(card).join('')||'<p class="muted">시험지가 없어요.</p>'}</main>`);
+    ${grouped}</main>`);
 }
 
 /* ---- start / resume ---- */
