@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EXAM 관리자</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+:root{--brand:#1B5E3B;--accent:#f5b301}
+.ov{background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;border:1.5px solid transparent}
+.ov:hover{border-color:var(--brand)}
+.ov .t{font-weight:700}
+.ov .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{font-size:13px;padding:3px 9px;border-radius:999px;background:#f1f3f7;font-weight:600}
+.chip.hi{background:var(--okbg);color:var(--ok)}.chip.mid{background:#fff4df;color:#b45309}.chip.lo{background:var(--nobg);color:var(--no)}.chip.ing{background:#f1f3f7;color:#888}
+.gh{font-size:15px;color:var(--brand);margin:18px 0 8px;font-weight:800}
+.wrap{max-width:1000px;padding-bottom:40px}
+.tabs{display:flex;gap:6px;margin:14px 0}
+.tab{padding:9px 16px;border-radius:999px;border:1.5px solid var(--line);background:#fff;font-weight:700;cursor:pointer;font-size:14px}
+.tab.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+select.inp{font-size:15px;padding:10px 12px;width:auto;min-width:220px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.live i{width:8px;height:8px;border-radius:50%;background:#bbb;display:inline-block}
+.live.on i{background:var(--ok);box-shadow:0 0 0 3px #d9f3e2}
+table.res{width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;font-size:14px}
+table.res th,table.res td{padding:10px 10px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}
+table.res th{background:#f3f5fa;font-weight:700;color:#444;font-size:13px}
+table.res td.nm{text-align:left;font-weight:700}
+table.res tr.click{cursor:pointer}
+table.res tr.click:hover{background:#f8f9ff}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:700}
+.pill.done{background:var(--okbg);color:var(--ok)}
+.pill.ing{background:#fff4df;color:#b45309}
+.sc{font-weight:700}
+.sc.lo{color:var(--no)}
+.sc.mid{color:#b45309}
+.sc.hi{color:var(--ok)}
+.detail{background:#fff;border-radius:14px;padding:16px;margin-top:14px}
+.detail h3{margin:0 0 10px;font-size:17px}
+.wrongs{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+.wrongs .cell{width:30px;height:30px;aspect-ratio:auto}
+.stat{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:12px 0}
+.stat .box{background:#fff;border-radius:12px;padding:12px 14px}
+.stat .box .k{font-size:12px;color:var(--muted);font-weight:600}
+.stat .box .v{font-size:22px;font-weight:800;color:var(--brand)}
+.bar{height:8px;background:#eceef5;border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--no)}
+.qrow{display:grid;grid-template-columns:44px 1fr 90px 60px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.qrow:last-child{border-bottom:0}
+.qrow .qt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#333}
+.drop{border:2px dashed #c9cfe0;border-radius:14px;padding:26px;text-align:center;background:#fff;color:var(--muted)}
+.drop.over{border-color:var(--brand);background:#eef2ff}
+textarea.inp{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;min-height:160px}
+.btn.sm{display:inline-block;width:auto;padding:8px 14px;font-size:14px;margin:0}
+.btn.danger{background:var(--no)}
+.btn.gray{background:#eceef5;color:#333}
+.setrow{display:flex;gap:10px;align-items:center;background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;flex-wrap:wrap}
+.setrow .t{font-weight:700;flex:1;min-width:160px}
+.setrow .link{font-size:12px;color:var(--muted);word-break:break-all;flex-basis:100%}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1b1d24;color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;opacity:0;transition:.2s;pointer-events:none}
+.toast.show{opacity:1}
+.pinbox{max-width:360px;margin:80px auto}
+.ans{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<script src="/config.js"></script>
+<script>
+const $=s=>document.querySelector(s); const app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const CIRC=['①','②','③','④','⑤'];
+const fb={
+  url:p=>`${CONFIG.dbUrl}/exam/${p}.json`,
+  get:p=>fetch(fb.url(p)).then(r=>r.json()),
+  put:(p,v)=>fetch(fb.url(p),{method:'PUT',body:JSON.stringify(v)}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}),
+  patch:(p,v)=>fetch(fb.url(p),{method:'PATCH',body:JSON.stringify(v)}).then(r=>r.json()),
+  del:p=>fetch(fb.url(p),{method:'DELETE'}).then(r=>r.json())
+};
+const A={tab:'results',meta:{},setId:null,set:null,results:{},es:null,sel:null};
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);};
+const fmt=iso=>{if(!iso)return '-';const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;};
+const cls=p=>p>=80?'hi':p>=60?'mid':'lo';
+const studentUrl=id=>`${location.origin}/?s=${encodeURIComponent(id)}`;
+
+/* ---- auth ---- */
+function gate(){
+  if(sessionStorage.getItem('exam_admin')==='1') return main();
+  app.innerHTML=`<header class="top"><div class="brand">TERRY'S <span>EXAM</span> · 관리자</div></header>
+  <div class="pinbox card"><label class="lbl">관리자 PIN</label><input id="pin" class="inp" type="password" inputmode="numeric" autocomplete="off"><button class="btn" onclick="checkPin()">입장</button></div>`;
+  $('#pin').focus(); $('#pin').addEventListener('keydown',e=>{if(e.key==='Enter')checkPin();});
+}
+function checkPin(){ if($('#pin').value===CONFIG.adminPin){sessionStorage.setItem('exam_admin','1');main();} else {$('#pin').classList.add('err');toast('PIN이 틀렸어요');} }
+
+/* ---- main ---- */
+async function main(){
+  app.innerHTML=`<header class="top"><div class="brand">TERRY'S <span>EXAM</span> · 관리자</div><a class="who" href="/" target="_blank">학생 페이지 ↗</a></header>
+  <div class="wrap"><div class="tabs"><button class="tab on" data-t="results" onclick="setTab('results')">제출 결과</button><button class="tab" data-t="sets" onclick="setTab('sets')">세트 관리</button></div><div id="pane"></div></div>`;
+  A.meta=(await fb.get('setsMeta'))||{};
+  const ids=Object.keys(A.meta).sort((a,b)=>(A.meta[b].createdAt||'').localeCompare(A.meta[a].createdAt||''));
+  A.setId=null;
+  renderPane();
+}
+function setTab(t){A.tab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t));renderPane();}
+function renderPane(){ A.tab==='results'?renderResults():renderSets(); }
+
+/* ---- results ---- */
+async function renderResults(){
+  const pane=$('#pane');
+  if(A.es){A.es.close();A.es=null;}
+  if(!A.setId) return renderOverview();
+  pane.innerHTML=`<div class="row"><button class="btn sm gray" onclick="A.setId=null;A.sel=null;renderResults()">← 전체 목록</button><b style="font-size:17px">${esc(A.meta[A.setId]?.title||A.setId)}</b>
+  <span class="live" id="live"><i></i>실시간</span><button class="btn sm gray" onclick="downloadCSV()">CSV</button></div>
+  <div id="stat"></div><div id="tbl"><div class="spinner"></div></div><div id="detail"></div>`;
+  A.set=await fb.get(`sets/${A.setId}`);
+  listen();
+}
+async function renderOverview(){
+  const pane=$('#pane'); pane.innerHTML='<div class="spinner"></div>';
+  A.meta=(await fb.get('setsMeta'))||{};
+  const all=(await fb.get('results'))||{};
+  const ids=Object.keys(A.meta);
+  if(!ids.length){pane.innerHTML='<p class="muted">시험지가 없어요. [세트 관리]에서 먼저 올려주세요.</p>';return;}
+  const G=['중2','중3','고1'];
+  const key=id=>{const m=A.meta[id];return [G.indexOf(m.grade)<0?9:G.indexOf(m.grade),m.book||'',m.order??999,m.createdAt||''];};
+  ids.sort((a,b)=>{const x=key(a),y=key(b);for(let i=0;i<4;i++){if(x[i]<y[i])return -1;if(x[i]>y[i])return 1;}return 0;});
+  let html='',last='';
+  ids.forEach(id=>{const m=A.meta[id];const grp=`${m.grade||'기타'} · ${m.book||''}`;if(grp!==last){html+=`<div class="gh">${esc(grp)}</div>`;last=grp;}
+    const rs=Object.values(all[id]||{}).filter(r=>r&&r.name).sort((a,b)=>(a.submittedAt||a.lastAt||'').localeCompare(b.submittedAt||b.lastAt||''));
+    const chips=rs.map(r=>{const p=r.totalMax?Math.round((r.total||0)/r.totalMax*100):0;return r.done?`<span class="chip ${cls(p)}">${esc(r.name)}(${p})</span>`:`<span class="chip ing">${esc(r.name)}(진행중)</span>`;}).join('');
+    html+=`<div class="ov" onclick="A.setId='${esc(id)}';renderResults()"><div class="t">${esc(m.title||id)} ${m.active===false?'<span class="pill ing">숨김</span>':''} <span class="muted small">${rs.length?rs.length+'명':''}</span></div><div class="chips">${chips||'<span class="muted small">아직 푼 학생 없음</span>'}</div></div>`;});
+  pane.innerHTML=`<div class="row"><span class="muted small">학생 이름(100점 환산 점수) · 시험지를 누르면 상세 결과</span><button class="btn sm gray" onclick="renderOverview()">새로고침</button></div>`+html;
+}
+function listen(){
+  if(A.es){A.es.close();A.es=null;}
+  const es=new EventSource(fb.url(`results/${A.setId}`));
+  A.es=es; A.results={};
+  es.addEventListener('put',e=>{const d=JSON.parse(e.data); if(d.path==='/'){A.results=d.data||{};} else {const k=d.path.split('/')[1]; if(d.path.split('/').length===2){ if(d.data===null)delete A.results[k]; else A.results[k]=d.data; } else { A.results[k]=A.results[k]||{}; setPath(A.results[k],d.path.split('/').slice(2),d.data);} } drawTable();});
+  es.addEventListener('patch',e=>{const d=JSON.parse(e.data); const parts=d.path.split('/').filter(Boolean); if(!parts.length){Object.assign(A.results,d.data);} else {const k=parts[0];A.results[k]=A.results[k]||{}; let o=A.results[k]; for(const p of parts.slice(1)){o[p]=o[p]||{};o=o[p];} Object.assign(o,d.data);} drawTable();});
+  es.onopen=()=>$('#live')?.classList.add('on'); es.onerror=()=>$('#live')?.classList.remove('on');
+}
+function setPath(o,parts,v){ for(let i=0;i<parts.length-1;i++){o[parts[i]]=o[parts[i]]||{};o=o[parts[i]];} if(v===null)delete o[parts.at(-1)]; else o[parts.at(-1)]=v; }
+function rows(){ return Object.entries(A.results||{}).map(([id,r])=>({id,...r})).sort((a,b)=>(b.lastAt||b.startedAt||'').localeCompare(a.lastAt||a.startedAt||'')); }
+function drawTable(){
+  const secs=A.set?.sections||[]; const rs=rows(); const tbl=$('#tbl'); if(!tbl)return;
+  const done=rs.filter(r=>r.done); const avg=done.length?Math.round(done.reduce((a,r)=>a+r.total/r.totalMax*100,0)/done.length):0;
+  $('#stat').innerHTML=`<div class="stat"><div class="box"><div class="k">제출(완료)</div><div class="v">${done.length}<span class="muted" style="font-size:14px"> / ${rs.length}명</span></div></div><div class="box"><div class="k">평균</div><div class="v">${avg}점</div></div><div class="box"><div class="k">최고</div><div class="v">${done.length?Math.max(...done.map(r=>Math.round(r.total/r.totalMax*100))):'-'}점</div></div><div class="box"><div class="k">최저</div><div class="v">${done.length?Math.min(...done.map(r=>Math.round(r.total/r.totalMax*100))):'-'}점</div></div></div>`;
+  if(!rs.length){tbl.innerHTML='<p class="muted">아직 제출한 학생이 없어요.</p>';return;}
+  tbl.innerHTML=`<div style="overflow-x:auto"><table class="res"><thead><tr><th>이름</th><th>상태</th>${secs.map(s=>`<th>${esc(s.name)}</th>`).join('')}<th>총점</th><th>%</th><th>시작</th><th>마지막</th><th></th></tr></thead><tbody>
+  ${rs.map(r=>{const p=r.totalMax?Math.round(r.total/r.totalMax*100):0;return `<tr class="click" onclick="showDetail('${esc(r.id)}')"><td class="nm">${esc(r.name)}</td><td>${r.done?'<span class="pill done">완료</span>':'<span class="pill ing">진행중</span>'}</td>
+  ${secs.map(s=>{const x=r.sections?.[s.id];return `<td>${x?`<span class="sc ${cls(x.score/x.total*100)}">${x.score}</span><span class="muted">/${x.total}</span>`:'<span class="muted">-</span>'}</td>`;}).join('')}
+  <td><b>${r.total||0}</b><span class="muted">/${r.totalMax||'-'}</span></td><td class="sc ${cls(p)}">${p}</td><td class="muted">${fmt(r.startedAt)}</td><td class="muted">${fmt(r.lastAt)}</td><td><button class="btn sm gray" onclick="event.stopPropagation();delResult('${esc(r.id)}','${esc(r.name)}')">삭제</button></td></tr>`;}).join('')}
+  </tbody></table></div>` + itemStats(rs,secs);
+  if(A.sel) showDetail(A.sel,true);
+}
+function itemStats(rs,secs){
+  const done=rs.filter(r=>r.sections); if(!done.length)return '';
+  return `<details class="review" style="margin-top:14px"><summary>문항별 오답률</summary>${secs.map(s=>{
+    const n=s.type==='mc'?s.questions.length:null; if(!n)return `<h3 style="font-size:14px;margin:12px 0 4px">${esc(s.name)} <span class="muted small">(빈칸은 개별 결과에서 확인)</span></h3>`;
+    const cnt=Array(n).fill(0),tot=Array(n).fill(0);
+    done.forEach(r=>{const d=r.sections?.[s.id]?.detail;if(!d)return;d.forEach((x,i)=>{tot[i]++;if(!x.ok)cnt[i]++;});});
+    return `<h3 style="font-size:14px;margin:12px 0 4px">${esc(s.name)}</h3>`+s.questions.map((q,i)=>{const p=tot[i]?Math.round(cnt[i]/tot[i]*100):0;return `<div class="qrow"><b>${i+1}</b><span class="qt" title="${esc(q.q.replace(/<[^>]+>/g,''))}">${q.q.replace(/<[^>]+>/g,'')} <span class="ans">정답 ${CIRC[q.answer]}</span></span><div class="bar"><i style="width:${p}%"></i></div><span class="sc ${p>=50?'lo':p>=30?'mid':'hi'}">${p}%</span></div>`;}).join('');
+  }).join('')}</details>`;
+}
+function showDetail(id,keep){
+  A.sel=id; const r=A.results[id]; const box=$('#detail'); if(!r||!box)return;
+  const secs=A.set?.sections||[];
+  box.innerHTML=`<div class="detail"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(r.name)} · ${r.total||0}/${r.totalMax} (${r.totalMax?Math.round(r.total/r.totalMax*100):0}점)</h3><button class="btn sm gray" onclick="A.sel=null;$('#detail').innerHTML=''">닫기</button></div>
+  ${secs.map(s=>{const x=r.sections?.[s.id]; if(!x)return `<h4 style="margin:12px 0 4px">${esc(s.name)} <span class="muted small">미제출</span></h4>`;
+    if(s.type==='mc'){return `<h4 style="margin:12px 0 4px">${esc(s.name)} ${x.score}/${x.total}</h4><div class="wrongs">${x.detail.map((d,i)=>`<div class="cell ${d.ok?'ok':'no'}" title="${d.ok?'정답':'학생 '+(d.a!=null?CIRC[d.a]:'미답')+' / 정답 '+CIRC[d.c]}">${i+1}</div>`).join('')}</div>
+      ${x.detail.some(d=>!d.ok)?`<div class="ans">${x.detail.map((d,i)=>d.ok?'':`${i+1}번: 학생 ${d.a!=null?CIRC[d.a]:'미답'} → 정답 ${CIRC[d.c]}`).filter(Boolean).join(' · ')}</div>`:''}`;}
+    const wrong=x.detail.filter(d=>!d.ok);
+    return `<h4 style="margin:12px 0 4px">${esc(s.name)} ${x.score}/${x.total}</h4>${wrong.length?`<div class="wrongs">${wrong.map(d=>`<span class="bk no"><s>${esc(d.a||'　')}</s> ${esc(d.c)}</span>`).join('')}</div>`:'<div class="ans">모두 정답</div>'}`;
+  }).join('')}</div>`;
+  if(!keep) box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function delResult(id,name){ if(!confirm(`${name} 기록을 삭제할까요?`))return; await fb.del(`results/${A.setId}/${id}`); toast('삭제했어요'); }
+function downloadCSV(){
+  const secs=A.set?.sections||[]; const rs=rows();
+  const head=['이름','상태',...secs.map(s=>s.name),'총점','만점','%','시작','마지막'];
+  const lines=[head.join(',')].concat(rs.map(r=>[r.name,r.done?'완료':'진행중',...secs.map(s=>r.sections?.[s.id]?.score??''),r.total||0,r.totalMax||'',r.totalMax?Math.round(r.total/r.totalMax*100):'',fmt(r.startedAt),fmt(r.lastAt)].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')));
+  const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${A.setId}_결과.csv`; a.click();
+}
+
+/* ---- sets ---- */
+function renderSets(){
+  if(A.es){A.es.close();A.es=null;}
+  const ids=Object.keys(A.meta).sort((a,b)=>(A.meta[b].createdAt||'').localeCompare(A.meta[a].createdAt||''));
+  $('#pane').innerHTML=`<div class="drop" id="drop">여기에 세트 JSON 파일을 드래그하거나 <label style="color:var(--brand);font-weight:700;cursor:pointer">파일 선택<input type="file" accept=".json,application/json" style="display:none" onchange="readFile(this.files[0])"></label>
+  <div class="small" style="margin-top:6px">또는 아래에 JSON을 붙여넣고 [등록]</div></div>
+  <textarea class="inp" id="json" placeholder='{"id":"...","grade":"중3","book":"동아윤정미", ...}' style="margin-top:10px"></textarea>
+  <div class="row" style="margin-top:8px"><button class="btn sm" onclick="uploadSet()">등록 / 업데이트</button><span class="muted small">같은 id로 올리면 문제가 교체돼요 (제출 기록은 유지).</span></div>
+  <h3 style="margin:22px 0 10px">등록된 세트</h3>
+  ${ids.length?ids.map(id=>{const m=A.meta[id];return `<div class="setrow"><div class="t">${esc(m.title||id)} <span class="muted small">${esc(m.subtitle||'')}</span></div>
+    <span class="pill ${m.active!==false?'done':'ing'}">${m.active!==false?'공개':'숨김'}</span>
+    <button class="btn sm gray" onclick="copyLink('${esc(id)}')">링크 복사</button>
+    <button class="btn sm gray" onclick="toggleActive('${esc(id)}',${m.active===false})">${m.active!==false?'숨기기':'공개'}</button>
+    <button class="btn sm danger" onclick="delSet('${esc(id)}')">삭제</button>
+    <div class="link">${esc(studentUrl(id))}</div></div>`;}).join(''):'<p class="muted">아직 없어요.</p>'}`;
+  const dz=$('#drop'); ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over');})); ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over');})); dz.addEventListener('drop',e=>readFile(e.dataTransfer.files[0]));
+}
+function readFile(f){ if(!f)return; const rd=new FileReader(); rd.onload=()=>{$('#json').value=rd.result; uploadSet();}; rd.readAsText(f,'utf-8'); }
+async function uploadSet(){
+  let d; try{ d=JSON.parse($('#json').value); }catch(e){ return toast('JSON 형식이 잘못됐어요'); }
+  if(!d.id||!Array.isArray(d.sections)) return toast('id와 sections가 필요해요');
+  try{
+    await fb.put(`sets/${d.id}`,d);
+    await fb.patch(`setsMeta/${d.id}`,{title:d.title||d.id,subtitle:d.subtitle||'',grade:d.grade||'',book:d.book||'',order:d.order??999,createdAt:A.meta[d.id]?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),active:A.meta[d.id]?.active??true});
+    toast(`등록 완료: ${d.title||d.id}`); $('#json').value='';
+    A.meta=(await fb.get('setsMeta'))||{}; A.setId=d.id; renderSets();
+  }catch(e){ toast('저장 실패 — Firebase 규칙을 확인해주세요'); }
+}
+async function toggleActive(id,on){ await fb.patch(`setsMeta/${id}`,{active:on}); A.meta[id].active=on; renderSets(); }
+async function delSet(id){ if(!confirm(`'${A.meta[id].title||id}' 세트를 삭제할까요? (제출 기록도 함께 삭제)`))return; await fb.del(`sets/${id}`); await fb.del(`setsMeta/${id}`); await fb.del(`results/${id}`); delete A.meta[id]; if(A.setId===id)A.setId=null; toast('삭제했어요'); renderSets(); }
+function copyLink(id){ navigator.clipboard.writeText(studentUrl(id)).then(()=>toast('링크를 복사했어요')); }
+
+gate();
+</script>
+</body>
+</html>
