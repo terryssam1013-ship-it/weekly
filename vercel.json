@@ -30,7 +30,7 @@
           "value": "exam.terrys.kr"
         }
       ],
-      "destination": "/exam/index.html"
+      "destination": "/exam"
     },
     {
       "source": "/admin",
@@ -40,7 +40,7 @@
           "value": "exam.terrys.kr"
         }
       ],
-      "destination": "/exam/admin.html"
+      "destination": "/exam/admin"
     }
   ]
 }
