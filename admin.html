@@ -144,7 +144,7 @@ function itemStats(rs,secs){
 function showDetail(id,keep){
   A.sel=id; if(!keep)A.rvSel=null; const r=A.results[id]; const box=$('#detail'); if(!r||!box)return;
   const secs=A.set?.sections||[];
-  box.innerHTML=`<div class="detail"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(r.name)} · ${r.total||0}/${r.totalMax} (${r.totalMax?Math.round(r.total/r.totalMax*100):0}점)</h3><button class="btn sm gray" onclick="A.sel=null;$('#detail').innerHTML=''">닫기</button></div>
+  box.innerHTML=`<div class="detail"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(r.name)} · ${r.total||0}/${r.totalMax} (${r.totalMax?Math.round(r.total/r.totalMax*100):0}점)</h3><div class="row" style="gap:6px"><button class="btn sm" onclick="openReport('${esc(id)}')">📷 학부모 리포트</button><button class="btn sm gray" onclick="A.sel=null;$('#detail').innerHTML=''">닫기</button></div></div>
   ${secs.map(s=>{const x=r.sections?.[s.id]; if(!x)return `<h4 style="margin:12px 0 4px">${esc(s.name)} <span class="muted small">미제출</span></h4>`;
     if(s.type==='mc'){return `<h4 style="margin:12px 0 4px">${esc(s.name)} ${x.score}/${x.total}</h4><div class="wrongs">${x.detail.map((d,i)=>`<div class="cell ${d.ok?'ok':'no'}" style="cursor:pointer" onclick="selRv('${s.id}',${i})" title="${d.ok?'정답':'학생 '+(d.a!=null?CIRC[d.a]:'미답')+' / 정답 '+CIRC[d.c]}">${i+1}</div>`).join('')}</div>
       ${x.detail.some(d=>!d.ok)?`<div class="ans">${x.detail.map((d,i)=>d.ok?'':`${i+1}번: 학생 ${d.a!=null?CIRC[d.a]:'미답'} → 정답 ${CIRC[d.c]}`).filter(Boolean).join(' · ')}</div>`:''}${A.rvSel&&A.rvSel.s===s.id?rvBox(s,A.rvSel.i,x.detail[A.rvSel.i]||{},true):''}${x.detail.some(d=>!d.ok)?`<details class="review" open style="margin-top:8px"><summary>오답 풀이 (${x.detail.filter(d=>!d.ok).length}문항) · 번호를 누르면 그 문제가 열려요</summary>${x.detail.map((d,i)=>d.ok?'':rvBox(s,i,d)).join('')}</details>`:''}`;}
@@ -156,6 +156,88 @@ function showDetail(id,keep){
 function selRv(sid,i){A.rvSel={s:sid,i};showDetail(A.sel,true);setTimeout(()=>document.getElementById('rvsel')?.scrollIntoView({behavior:'smooth',block:'center'}),50);}
 function rvBox(s,i,d,sel){const q=s.questions[i];if(!q)return '';const ref=q.ref!=null?s.questions[q.ref]:null;const gp=q.gp||(ref&&ref.gp);
   return `<div class="q rv" ${sel?'id="rvsel" style="border:2px solid var(--brand);border-radius:12px;padding:12px;margin:10px 0"':'style="margin:4px 0"'}><div class="qn">${String(i+1).padStart(2,'0')}</div><div class="qbody">${gp?`<details><summary class="small" style="color:var(--brand);cursor:pointer;font-weight:700">지문 보기</summary><div class="passage">${gp}</div></details>`:''}<div class="qt">${q.q}</div>${q.passage?`<div class="passage">${q.passage}</div>`:''}<div class="choices">${q.choices.map((c,j)=>`<div class="ch ${j===q.answer?'right':''} ${j===d.a&&j!==q.answer?'wrong':''}"><span class="c">${CIRC[j]}</span><span class="ct">${c}</span></div>`).join('')}</div><div class="ans" style="margin-top:6px">학생 답 <b style="color:${d.ok?'var(--ok)':'var(--no)'}">${d.a!=null?CIRC[d.a]:'미답'}</b> · 정답 <b style="color:var(--ok)">${CIRC[q.answer]}</b>${sel?` <button class="btn sm gray" style="margin-left:8px" onclick="A.rvSel=null;showDetail(A.sel,true)">닫기</button>`:''}</div>${q.e?`<div class="ans" style="background:#fff8e1;border-radius:8px;padding:8px 10px;margin-top:6px;color:#5a4500"><b>해설</b> ${q.e}</div>`:''}</div></div>`;}
+/* ---- 학부모 리포트(이미지) ---- */
+const RF='-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif';
+function openReport(id){
+  const r=A.results[id]; if(!r)return;
+  let m=document.getElementById('repModal'); if(m)m.remove();
+  m=document.createElement('div'); m.id='repModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:50;overflow:auto;padding:20px 12px';
+  m.innerHTML=`<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:16px">
+   <div class="row" style="justify-content:space-between;margin-bottom:8px"><b>학부모 리포트 · ${esc(r.name)}</b><button class="btn sm gray" onclick="document.getElementById('repModal').remove()">닫기</button></div>
+   <label class="lbl" style="font-size:13px">선생님 코멘트 (선택)</label>
+   <textarea id="repCmt" class="inp" style="font-family:inherit;font-size:14px;min-height:64px" placeholder="예) 문법은 안정적이에요. 대화문 표현을 이번 주에 다시 복습할게요." oninput="drawReport('${esc(id)}')"></textarea>
+   <div class="row" style="gap:8px;margin:10px 0"><button class="btn" onclick="saveReport('${esc(id)}')">📷 이미지 저장</button><button class="btn gray" id="repShare" onclick="shareReport('${esc(id)}')" style="display:none">공유하기</button></div>
+   <canvas id="repCv" style="width:100%;border:1px solid #e5e7eb;border-radius:12px"></canvas></div>`;
+  document.body.appendChild(m);
+  if(navigator.canShare)document.getElementById('repShare').style.display='';
+  drawReport(id);
+}
+function repData(id){
+  const r=A.results[id]; const secs=A.set?.sections||[];
+  const done=Object.values(A.results||{}).filter(x=>x.done&&x.totalMax);
+  const pct=r.totalMax?Math.round(r.total/r.totalMax*100):0;
+  const avg=done.length?Math.round(done.reduce((a,x)=>a+x.total/x.totalMax*100,0)/done.length):null;
+  const rows=secs.map(s=>{const x=r.sections?.[s.id];const others=done.map(o=>o.sections?.[s.id]).filter(Boolean);
+    const sa=others.length?Math.round(others.reduce((a,o)=>a+o.score/o.total*100,0)/others.length):null;
+    return {name:s.name,score:x?x.score:null,total:x?x.total:(s.questions?s.questions.length:null),p:x&&x.total?Math.round(x.score/x.total*100):null,avg:sa};});
+  return {r,pct,avg,rows,n:done.length,title:A.meta[A.setId]?.title||A.setId};
+}
+function wrapText(ctx,t,max){const out=[];for(const para of String(t).split('\n')){let line='';for(const w of para.split(/(\s+)/)){if(ctx.measureText(line+w).width<=max){line+=w;continue;}if(line.trim()){out.push(line.trim());line='';}let ww=w.trimStart();while(ctx.measureText(ww).width>max){let k=ww.length;while(k>1&&ctx.measureText(ww.slice(0,k)).width>max)k--;out.push(ww.slice(0,k));ww=ww.slice(k);}line=ww;}out.push(line.trim());}return out;}
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function drawReport(id){
+  const cv=document.getElementById('repCv'); if(!cv)return;
+  const D=repData(id); const cmt=(document.getElementById('repCmt')?.value||'').trim();
+  const W=1080, P=64, ctx=cv.getContext('2d');
+  const good=D.rows.filter(x=>x.p!=null&&x.p>=80).map(x=>x.name), weak=D.rows.filter(x=>x.p!=null&&x.p<60);
+  const auto=[]; if(good.length)auto.push('잘한 영역: '+good.join(', ')); if(weak.length)auto.push('보강 필요: '+weak.map(x=>`${x.name} (${x.score}/${x.total})`).join(', '));
+  if(!auto.length)auto.push('전 영역 고르게 60점 이상이에요.');
+  ctx.font=`500 30px ${RF}`; const cl=cmt?wrapText(ctx,cmt,W-2*P-48):[];
+  const H=200+250+90+D.rows.length*92+60+auto.length*44+(cl.length?90+cl.length*44:0)+110;
+  cv.width=W; cv.height=H;
+  ctx.fillStyle='#f4f6fb';ctx.fillRect(0,0,W,H);
+  // header
+  ctx.fillStyle='#1e3a8a';ctx.fillRect(0,0,W,170);
+  ctx.fillStyle='#fff';ctx.font=`800 34px ${RF}`;ctx.fillText("TERRY'S ENGLISH",P,72);
+  ctx.font=`600 28px ${RF}`;ctx.globalAlpha=.85;ctx.fillText('주간테스트 결과 리포트',P,120);ctx.globalAlpha=1;
+  const dt=new Date(D.r.submittedAt||D.r.lastAt||D.r.startedAt||Date.now());
+  ctx.textAlign='right';ctx.font=`600 26px ${RF}`;ctx.fillText(`${dt.getFullYear()}.${dt.getMonth()+1}.${dt.getDate()}`,W-P,120);ctx.textAlign='left';
+  // score card
+  let y=200; ctx.fillStyle='#fff';rr(ctx,P,y,W-2*P,230,24);ctx.fill();
+  ctx.fillStyle='#111827';ctx.font=`800 44px ${RF}`;ctx.fillText(D.r.name,P+36,y+68);
+  ctx.fillStyle='#6b7280';ctx.font=`500 26px ${RF}`;wrapText(ctx,D.title,560).slice(0,2).forEach((l,i)=>ctx.fillText(l,P+36,y+112+i*34));
+  const col=p=>p>=80?'#16a34a':p>=60?'#d97706':'#dc2626';
+  ctx.textAlign='right';ctx.fillStyle=col(D.pct);ctx.font=`900 104px ${RF}`;ctx.fillText(D.pct,W-P-96,y+130);
+  ctx.font=`800 40px ${RF}`;ctx.fillText('점',W-P-40,y+130);
+  ctx.fillStyle='#6b7280';ctx.font=`600 26px ${RF}`;ctx.fillText(`맞힌 개수 ${D.r.total||0} / ${D.r.totalMax}`,W-P-40,y+178);
+  if(D.avg!=null&&D.n>1){ctx.fillText(`반 평균 ${D.avg}점`,W-P-40,y+212);} ctx.textAlign='left';
+  // sections
+  y+=270; ctx.fillStyle='#111827';ctx.font=`800 32px ${RF}`;ctx.fillText('영역별 결과',P,y);
+  if(D.n>1){ctx.fillStyle='#6b7280';ctx.font=`500 22px ${RF}`;ctx.textAlign='right';ctx.fillText('▼ 반 평균',W-P,y);ctx.textAlign='left';}
+  y+=30; const bx=P+230, bw=W-2*P-230-170;
+  D.rows.forEach(s=>{
+    ctx.fillStyle='#fff';rr(ctx,P,y,W-2*P,76,16);ctx.fill();
+    ctx.fillStyle='#111827';ctx.font=`700 28px ${RF}`;ctx.fillText(s.name,P+24,y+48);
+    ctx.fillStyle='#e5e7eb';rr(ctx,bx,y+28,bw,20,10);ctx.fill();
+    if(s.p!=null){ctx.fillStyle=col(s.p);rr(ctx,bx,y+28,Math.max(20,bw*s.p/100),20,10);ctx.fill();}
+    if(s.avg!=null&&D.n>1){const ax=bx+bw*s.avg/100;ctx.fillStyle='#111827';ctx.beginPath();ctx.moveTo(ax-9,y+14);ctx.lineTo(ax+9,y+14);ctx.lineTo(ax,y+26);ctx.closePath();ctx.fill();}
+    ctx.textAlign='right';ctx.font=`800 30px ${RF}`;
+    if(s.p!=null){ctx.fillStyle=col(s.p);ctx.fillText(`${s.score}`,W-P-80,y+50);ctx.fillStyle='#9ca3af';ctx.font=`600 24px ${RF}`;ctx.fillText(`/${s.total}`,W-P-24,y+50);}
+    else{ctx.fillStyle='#9ca3af';ctx.font=`600 24px ${RF}`;ctx.fillText('미응시',W-P-24,y+50);}
+    ctx.textAlign='left'; y+=92;});
+  // summary
+  y+=20; ctx.fillStyle='#111827';ctx.font=`800 32px ${RF}`;ctx.fillText('한눈에 보기',P,y); y+=16;
+  ctx.font=`600 28px ${RF}`; auto.forEach(t=>{y+=44;ctx.fillStyle=t.startsWith('보강')?'#dc2626':'#16a34a';ctx.fillText('• '+t,P+8,y);});
+  if(cl.length){y+=50;ctx.fillStyle='#fff8e1';rr(ctx,P,y,W-2*P,cl.length*44+64,18);ctx.fill();
+    ctx.fillStyle='#92400e';ctx.font=`800 26px ${RF}`;ctx.fillText('선생님 코멘트',P+24,y+42);
+    ctx.fillStyle='#3f2d00';ctx.font=`500 30px ${RF}`;cl.forEach((l,i)=>ctx.fillText(l,P+24,y+86+i*44)); y+=cl.length*44+64;}
+  ctx.fillStyle='#9ca3af';ctx.font=`600 22px ${RF}`;ctx.textAlign='center';ctx.fillText("TERRY'S ENGLISH · 동탄남광장",W/2,H-36);ctx.textAlign='left';
+}
+function repBlob(){return new Promise(res=>document.getElementById('repCv').toBlob(res,'image/png'));}
+function repName(id){const D=repData(id);return `${D.r.name}_${D.title}_리포트.png`.replace(/[\\/:*?"<>|]/g,'');}
+async function saveReport(id){drawReport(id);const b=await repBlob();const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=repName(id);a.click();toast('이미지를 저장했어요');}
+async function shareReport(id){drawReport(id);const b=await repBlob();const f=new File([b],repName(id),{type:'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:'주간테스트 결과'});}catch(e){}} else saveReport(id);}
 async function delResult(id,name){ if(!confirm(`${name} 기록을 삭제할까요?`))return; await fb.del(`results/${A.setId}/${id}`); toast('삭제했어요'); }
 function downloadCSV(){
   const secs=A.set?.sections||[]; const rs=rows();
