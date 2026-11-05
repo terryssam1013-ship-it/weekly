@@ -126,6 +126,10 @@ async function showHome(g,b,v){
   render(hdr()+`<main class="wrap"><div class="center" style="margin:30px auto"><div class="spinner"></div></div></main>`);
   let meta={},mine={}; try{[meta,mine]=await Promise.all([fb.get('setsMeta').then(x=>x||{}),myRecords()]);}catch(e){}
   const items=Object.entries(meta).filter(([k,x])=>x&&x.active!==false);
+  let STUDY=[];try{STUDY=await fetch('/exam/studydata/catalog.json',{cache:'no-cache'}).then(r=>r.json());}catch(e){}
+  const nb=x=>String(x||'').replace(/[\s()（）_\-·.]/g,'');
+  const studyFor=(g,b)=>STUDY.filter(u=>u.grade===g&&(b==null||nb(u.book)===nb(b)));
+  const studyProg=id=>{try{const p=JSON.parse(localStorage.getItem('study_'+id)||'{}');let d=0;Object.values(p).forEach(part=>Object.values(part).forEach(act=>Object.values(act).forEach(v=>{if(v&&(v.done||v.seen))d++;})));return d;}catch(e){return 0;}};
   const tabs=`<div class="tabs2"><a href="/" class="${v?'':'on'}">시험지</a><a href="?v=me" class="${v?'on':''}">내 기록</a></div>`;
   const card=([id,m])=>{const r=mine[id];return `<a class="setcard ${r?.done?'isdone':''}" href="?s=${encodeURIComponent(id)}"><div class="info"><div class="t">${esc(m.title||id)}</div><div class="st">${esc(m.subtitle||'')}</div></div>${badge(r)}</a>`;};
   if(v==='me'){
@@ -138,7 +142,7 @@ async function showHome(g,b,v){
     return render(hdr()+`<main class="wrap">${tabs}<h2 class="h">학년을 선택하세요</h2><div class="grades">${GRADES.map(x=>{const inG=items.filter(([k,m])=>m.grade===x&&m.type!=='memo');const d=inG.filter(([k])=>mine[k]?.done).length;return `<a class="grade" href="?g=${encodeURIComponent(x)}">${x}<small>${inG.length?`${d} / ${inG.length} 완료`:'준비 중'}</small></a>`;}).join('')}</div></main>`);
   }
   const inG=items.filter(([k,m])=>m.grade===g);
-  const books=[...new Set(inG.map(([k,m])=>m.book||'기타'))];
+  const books=[...new Set([...inG.map(([k,m])=>m.book||'기타'),...studyFor(g).map(u=>u.book).filter(x=>!inG.some(([k,m])=>nb(m.book||'기타')===nb(x)))])];
   if(!b){
     return render(hdr()+`<main class="wrap"><div class="crumb"><a href="/">학년</a> › ${esc(g)}</div><h2 class="h">${esc(g)} — 교재 선택</h2>
       ${books.length?books.map(x=>{const L=inG.filter(([k,m])=>(m.book||'기타')===x&&m.type!=='memo');const d=L.filter(([k])=>mine[k]?.done).length;return `<a class="setcard" href="?g=${encodeURIComponent(g)}&b=${encodeURIComponent(x)}"><div class="info"><div class="t">${esc(x)}</div><div class="st">시험지 ${L.length}개</div></div><span class="st-badge ${d===L.length?'done':d?'ing':'new'}">${d} / ${L.length} 완료</span></a>`;}).join(''):'<p class="muted">아직 등록된 시험지가 없어요.</p>'}</main>`);
@@ -148,7 +152,8 @@ async function showHome(g,b,v){
   const mcard=([id,m])=>{const p=mp[id];const pct=p?p.pct||0:null;return `<a class="setcard ${pct===100?'isdone':''}" href="/exam/memo?m=${encodeURIComponent(id)}"><div class="info"><div class="t">${esc(m.title||id)}</div><div class="st">${esc(m.subtitle||'')}</div></div><span class="st-badge ${pct===100?'done':pct!=null?'ing':'new'}">${pct==null?'시작 전':pct===100?'✔ 암기 완료':'암기 '+pct+'%'}</span></a>`;};
   const rows=L=>{const seen=new Set();return L.map(x=>{const m=x[1];if(m.type==='memo')return mcard(x);if(!m.group)return card(x);if(seen.has(m.group))return '';seen.add(m.group);const G=L.filter(y=>y[1].group===m.group);return `<div class="gcard"><div class="t">${esc(m.groupTitle||m.title)}</div><div class="gbtns">${G.map(([id,g])=>`<a class="gbtn" href="?s=${encodeURIComponent(id)}">${esc(g.kind||g.title)}${badge(mine[id])}</a>`).join('')}</div></div>`;}).join('');};
   const CATS=['본문외우기','문법','기출유형'];const catOf=m=>m.type==='memo'?'본문외우기':(m.cat||'기타');const cats=[...CATS,...new Set(list.map(([k,m])=>catOf(m)).filter(c=>!CATS.includes(c)))];
-  const grouped=cats.map(c=>{const L=list.filter(([k,m])=>catOf(m)===c);return L.length?`<div class="cath">${c==='본문외우기'?'📖 본문 외우기':c==='문법'?'✏️ 문법':c==='기출유형'?'📝 기출유형':esc(c)}</div>`+rows(L):'';}).join('')||'<p class="muted">시험지가 없어요.</p>';
+  const SU=studyFor(g,b);const studyHtml=SU.length?`<div class="cath">📱 기초학습</div><div class="gcard"><div class="t">한줄학습 · 단어 테스트 · 문장 빈칸 · 언스크램블</div><div class="gbtns">${SU.map(u=>`<a class="gbtn" href="/exam/study?u=${encodeURIComponent(u.id)}">${esc(u.title)}<small style="font-size:11px;font-weight:600;color:var(--muted)">${studyProg(u.id)?'진행 중':'시작'}</small></a>`).join('')}</div></div>`:'';
+  const grouped=studyHtml+cats.map(c=>{const L=list.filter(([k,m])=>catOf(m)===c);return L.length?`<div class="cath">${c==='본문외우기'?'📖 본문 외우기':c==='문법'?'✏️ 문법':c==='기출유형'?'📝 기출유형':esc(c)}</div>`+rows(L):'';}).join('')||(SU.length?'':'<p class="muted">시험지가 없어요.</p>');
   render(hdr()+`<main class="wrap"><div class="crumb"><a href="/">학년</a> › <a href="?g=${encodeURIComponent(g)}">${esc(g)}</a> › ${esc(b)}</div><h2 class="h">${esc(b)}</h2>
     ${grouped}</main>`);
 }
