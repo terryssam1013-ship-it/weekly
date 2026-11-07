@@ -34,6 +34,10 @@
 .st-badge.new{background:#f1f3f7;color:#8a8f9c}
 .setcard.isdone{background:#f7fbf8}
 .cath{font-weight:800;color:var(--brand);font-size:15px;margin:22px 0 8px}
+.roundbox{background:#eef7f1;border:1px solid #b9dcc6;border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:14px}
+.roundbox b{display:block;color:var(--brand);margin-bottom:2px}
+.roundbox span{color:var(--muted);font-size:12.5px}
+.hint{font-size:12px;color:#92400e;background:#fff7e6;border-radius:5px;padding:1px 5px;font-family:Georgia,serif}
 .gcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
 .gcard .t{font-weight:700;font-size:17px;margin-bottom:8px}
 .gbtns{display:flex;gap:8px}
@@ -53,7 +57,7 @@
 <script>
 const ROOT='exam', GRADES=['중2','중3','고1'];
 const BRAND=`TERRY'S <span>EXAM</span>`;
-const S={setId:null,set:null,name:'',resultId:null,secIdx:0,answers:{},results:{},startedAt:null,retry:null};
+const S={setId:null,set:null,raw:null,round:0,doneCount:0,name:'',resultId:null,secIdx:0,answers:{},results:{},startedAt:null,retry:null};
 const $=s=>document.querySelector(s); const app=$('#app');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const CIRC=['①','②','③','④','⑤']; const LS='exam_progress_', LSN='exam_name';
@@ -103,13 +107,15 @@ async function boot(){
   if(!S.setId) return showHome(u.searchParams.get('g'),u.searchParams.get('b'),u.searchParams.get('v'));
   render(`<div class="center"><div class="spinner"></div><p>불러오는 중…</p></div>`);
   try{S.set=await fb.get(`sets/${S.setId}`);}catch(e){S.set=null;}
+  S.raw=S.set;
   if(!S.set) return render(`<div class="center"><h2>시험지를 찾을 수 없어요</h2><a class="btn ghost" href="/">처음으로</a></div>`);
   if(u.searchParams.get('r')) return showPast(u.searchParams.get('r'));
   let recs={}; try{recs=(await fb.get(`results/${S.setId}`))||{};}catch(e){}
   const mine=Object.entries(recs).filter(([k,v])=>v&&v.name===S.name);
   const ing=mine.filter(([k,v])=>!v.done).sort((a,b)=>(b[1].lastAt||'').localeCompare(a[1].lastAt||''))[0];
   const done=mine.filter(([k,v])=>v.done).sort((a,b)=>(b[1].submittedAt||'').localeCompare(a[1].submittedAt||''))[0];
-  if(ing) return resumeRecord(ing[0],ing[1]);
+  S.doneCount=mine.filter(([k,v])=>v.done).length; applyRound(S.doneCount);
+  if(ing){ if(ing[1].round!=null) applyRound(ing[1].round); return resumeRecord(ing[0],ing[1]); }
   if(done) return showDoneChoice(done[0],done[1]);
   showStart();
 }
@@ -164,15 +170,17 @@ function showStart(){
   render(hdr()+`<main class="wrap"><div class="card">
     <div class="tag">${esc(set.title)}</div><h1 class="title">${esc(set.subtitle||'')}</h1>
     <ul class="seclist">${sections().map((s,i)=>`<li><span class="num">${i+1}</span>${esc(s.name)}<span class="cnt">${secMax(s)}${s.type==='mc'?'문항':'칸'}</span></li>`).join('')}</ul>
+    ${hasTags(S.raw)?`<div class="roundbox"><b>이번 회차 · ${esc(roundLabel(S.doneCount))}</b><span>${S.doneCount+1}번째 도전 — 풀 때마다 빈칸 유형이 바뀌어요 (어휘 → 문법 → 연결어 → 어구 → 영영풀이)</span></div>`:''}
     <p style="margin:0 0 4px"><b>${esc(S.name)}</b> 학생으로 시작해요.</p>
     <button class="btn big" onclick="start()">시작하기</button>
     <p class="muted small">고른 답은 자동 저장돼서 나갔다 들어와도 이어서 풀 수 있어요. 제출하면 바로 채점되고 틀린 문제는 해설과 함께 보여줘요.</p></div></main>`);
 }
 async function start(){
+  applyRound(S.doneCount);
   S.secIdx=0;S.answers={};S.results={};S.startedAt=now();
   S.resultId=`${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   saveProgress();
-  await fb.put(`results/${S.setId}/${S.resultId}`,{name:S.name,startedAt:S.startedAt,setTitle:S.set.title,total:0,totalMax:totalMax(),done:false,lastAt:now()}).catch(()=>{});
+  await fb.put(`results/${S.setId}/${S.resultId}`,{name:S.name,startedAt:S.startedAt,setTitle:S.set.title,total:0,totalMax:totalMax(),done:false,lastAt:now(),...(hasTags(S.raw)?{round:S.round,roundName:roundLabel(S.round)}:{})}).catch(()=>{});
   trapBack(); showSection();
 }
 function resumeRecord(rid,rec){
@@ -193,7 +201,7 @@ function showDoneChoice(rid,rec){
   render(hdr()+`<main class="wrap"><div class="card center" style="margin-top:20px"><div class="tag">${esc(S.set.title)}</div>
     <h2>이미 푼 시험지예요</h2><div class="scorecard" style="margin:8px 0"><div class="big">${rec.total}<span>/ ${rec.totalMax}</span></div><div class="pct">${pct(rec.total,rec.totalMax)}점</div><div class="muted small" style="margin-top:6px">${fmtD(rec.submittedAt)} 제출</div></div>
     <button class="btn" onclick="location.href='?s=${encodeURIComponent(S.setId)}&r=${encodeURIComponent(rid)}'">결과 · 오답 풀이 보기</button>
-    <button class="btn ghost" onclick="if(confirm('처음부터 다시 풀까요? (이전 기록은 남아 있어요)'))start()">처음부터 다시 풀기</button></div></main>`);
+    <button class="btn ghost" onclick="if(confirm('처음부터 다시 풀까요? (이전 기록은 남아 있어요)'))start()">${hasTags(S.raw)?`다시 풀기 · 다음 회차 ${esc(roundLabel(S.doneCount))}`:'처음부터 다시 풀기'}</button></div></main>`);
 }
 function fmtD(iso){if(!iso)return '';const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
 
@@ -224,11 +232,30 @@ function pick(i,j){
   const sec=sections()[S.secIdx];S.answers[sec.id]=S.answers[sec.id]||[];S.answers[sec.id][i]=j;
   document.querySelectorAll(`#q${i} .ch`).forEach((el,k)=>el.classList.toggle('on',k===j));pushDraft();
 }
+
+/* ---- 회차별 빈칸 유형 (v 어휘 / g 문법 / c 연결어 / p 어구 / d 영영풀이) ---- */
+const ROUNDS=[['v','① 핵심 어휘'],['g','② 문법 포인트'],['c','③ 연결어·전치사·숙어'],['p','④ 어구(2~3단어)'],['d','⑤ 영영풀이 힌트']];
+function parseTok(raw){const i=raw.indexOf('@');if(i<0)return {ans:raw,tags:null,def:null};const ans=raw.slice(0,i);let def=null;const tags=raw.slice(i+1).split(',').map(x=>x.trim()).filter(Boolean).map(x=>{if(x.startsWith('d:')){def=x.slice(2).trim();return 'd';}return x;});return {ans,tags,def};}
+function hasTags(set){return !!set&&(set.sections||[]).some(sec=>sec.type==='cloze'&&sec.parts.some(pt=>pt.lines.some(l=>/\{\{[^}]*@/.test(l.t))));}
+function materialize(set,round){
+  if(!hasTags(set))return set;
+  const copy=JSON.parse(JSON.stringify(set));const key=ROUNDS[round%ROUNDS.length][0];
+  copy.sections.forEach(sec=>{if(sec.type!=='cloze')return;sec.parts.forEach(pt=>pt.lines.forEach(l=>{
+    const toks=[];l.t.replace(/\{\{([^}]+)\}\}/g,(m,raw)=>{toks.push(parseTok(raw));return m;});
+    const tagged=toks.filter(t=>t.tags);
+    const has=k=>tagged.some(t=>t.tags.includes(k)&&(k!=='d'?true:!!t.def));
+    let use=null;if(tagged.length){const order=ROUNDS.map(r=>r[0]);const st=order.indexOf(key);for(let i=0;i<order.length;i++){const k=order[(st+i)%order.length];if(has(k)){use=k;break;}}}
+    let i=0;l.t=l.t.replace(/\{\{([^}]+)\}\}/g,()=>{const t=toks[i++];if(!t.tags)return `{{${t.ans}}}`;const on=use&&t.tags.includes(use)&&(use!=='d'||t.def);if(!on)return t.ans;return use==='d'?`{{${t.ans}##${t.def}}}`:`{{${t.ans}}}`;});
+  }));});
+  return copy;
+}
+function roundLabel(r){return ROUNDS[r%ROUNDS.length][1];}
+function applyRound(r){S.round=r;S.set=materialize(S.raw,r);}
 let clozeIdx=0;
-function renderCloze(sec){clozeIdx=0;const saved=S.answers[sec.id]||[];return sec.parts.map(p=>`<div class="part"><h3>${esc(p.title)}</h3>${p.lines.map(l=>{const html=l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{const k=clozeIdx++;const first=ans.split('|')[0];return `<input class="blank" data-k="${k}" style="width:${Math.min(42,Math.max(5,(/[가-힣]/.test(first)?first.length*1.7:first.length*0.8)+2))}ch" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(saved[k]||'')}" oninput="typed(${k},this.value)">`;});return `<div class="line">${l.s?`<span class="sp">${esc(l.s)}</span>`:l.n?`<span class="sp n">${String(l.n).padStart(2,'0')}</span>`:''}<span class="lt">${html}</span></div>`;}).join('')}</div>`).join('');}
+function renderCloze(sec){clozeIdx=0;const saved=S.answers[sec.id]||[];return sec.parts.map(p=>`<div class="part"><h3>${esc(p.title)}</h3>${p.lines.map(l=>{const html=l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{const k=clozeIdx++;const [core,hint]=ans.split('##');const first=core.split('|')[0];return (hint?`<span class="hint">(${esc(hint)})</span> `:'')+`<input class="blank" data-k="${k}" style="width:${Math.min(42,Math.max(5,(/[가-힣]/.test(first)?first.length*1.7:first.length*0.8)+2))}ch" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(saved[k]||'')}" oninput="typed(${k},this.value)">`;});return `<div class="line">${l.s?`<span class="sp">${esc(l.s)}</span>`:l.n?`<span class="sp n">${String(l.n).padStart(2,'0')}</span>`:''}<span class="lt">${html}</span></div>`;}).join('')}</div>`).join('');}
 function typed(k,v){const sec=sections()[S.secIdx];S.answers[sec.id]=S.answers[sec.id]||[];S.answers[sec.id][k]=v;pushDraft();}
 function gradeMC(sec){const a=S.answers[sec.id]||[];let score=0;const detail=sec.questions.map((q,i)=>{const ok=a[i]===q.answer;if(ok)score++;return {a:a[i]??null,ok,c:q.answer};});return {score,total:sec.questions.length,detail};}
-function gradeCloze(sec){const a=S.answers[sec.id]||[];let k=0,score=0;const detail=[];sec.parts.forEach(p=>p.lines.forEach(l=>{l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans)=>{const alts=ans.split('|').map(norm);const g=a[k]||'';const ok=alts.includes(norm(g));if(ok)score++;detail.push({a:g,ok,c:ans.split('|')[0]});k++;return m;});}));return {score,total:k,detail};}
+function gradeCloze(sec){const a=S.answers[sec.id]||[];let k=0,score=0;const detail=[];sec.parts.forEach(p=>p.lines.forEach(l=>{l.t.replace(/\{\{([^}]+)\}\}/g,(m,ans0)=>{const ans=ans0.split('##')[0];const alts=ans.split('|').map(norm);const g=a[k]||'';const ok=alts.includes(norm(g));if(ok)score++;detail.push({a:g,ok,c:ans.split('|')[0]});k++;return m;});}));return {score,total:k,detail};}
 
 async function submitSection(){
   if(S.retry) return submitRetry();
@@ -271,7 +298,7 @@ function showFinal(results,rid){
   const multi=sections().length>1;
   const wrongN=sections().reduce((a,s)=>a+(s.type==='mc'&&results[s.id]?results[s.id].detail.filter(d=>!d.ok).length:0),0);
   render(hdr()+`<main class="wrap" style="padding-bottom:40px">
-    <div class="scorecard final"><div class="lab">${esc(S.name)} · ${esc(S.set.title)}</div><div class="big">${sum}<span>/ ${max}</span></div><div class="pct">${pct(sum,max)}점</div></div>
+    <div class="scorecard final"><div class="lab">${esc(S.name)} · ${esc(S.set.title)}${hasTags(S.raw)?' · '+esc(roundLabel(S.round)):''}</div><div class="big">${sum}<span>/ ${max}</span></div><div class="pct">${pct(sum,max)}점</div></div>
     ${wrongN?`<button class="btn" onclick="startRetry()">틀린 문제 다시 풀기 (${wrongN}문항)</button>`:''}
     ${multi?`<table class="tbl" style="margin-top:14px">${sections().map(s=>{const r=results[s.id]||{score:0,total:secMax(s)};return `<tr><td>${esc(s.name)}</td><td class="r"><b>${r.score}</b> / ${r.total}</td></tr>`;}).join('')}</table>`:''}
     ${sections().map(s=>{const r=results[s.id];if(!r)return '';return `${multi?`<h3 class="rvh">${esc(s.name)}</h3>`:'<div style="height:14px"></div>'}${s.type==='mc'?grid(r.detail)+`<h3 class="rvh">오답 풀이 (${r.detail.filter(d=>!d.ok).length}문항)</h3>${reviewMC(s,r.detail)}`:reviewCloze(s,r.detail)}`;}).join('')}
@@ -282,6 +309,7 @@ function showFinal(results,rid){
 async function showPast(rid){
   let rec=null; try{rec=await fb.get(`results/${S.setId}/${rid}`);}catch(e){}
   if(!rec||rec.name!==S.name) return render(`<div class="center"><h2>기록을 찾을 수 없어요</h2><a class="btn ghost" href="/">처음으로</a></div>`);
+  if(rec.round!=null) applyRound(rec.round);
   const res={}; sections().forEach(s=>{const x=rec.sections?.[s.id];if(x)res[s.id]={score:x.score,total:x.total,detail:x.detail||[]};});
   showFinal(res,rid);
 }
