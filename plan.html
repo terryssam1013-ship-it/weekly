@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주간테스트 기록표</title>
+<link rel="stylesheet" href="common.css">
+<style>
+.wrap{max-width:1180px;padding-bottom:60px}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:14px 0}
+.wk{font-size:20px;font-weight:800;color:var(--brand);min-width:220px;text-align:center}
+.btn.sm{padding:7px 12px;font-size:13.5px;border-radius:10px;width:auto;display:inline-block;margin:0}
+.btn.gray{background:#eef1f6;color:#1f2937}
+.btn.line{background:#fff;color:var(--brand);border:1.5px solid var(--brand)}
+.sum{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px}
+.sum span{background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13.5px;font-weight:700}
+.cls{margin:18px 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cls h2{font-size:17px;margin:0}
+.tw{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:12px}
+table.pl{border-collapse:collapse;width:100%;min-width:1060px;font-size:13.5px}
+.pl th{background:#e9f1f4;font-weight:800;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:center}
+.pl td{border-top:1px solid #edf0f4;padding:4px 5px;vertical-align:middle}
+.pl td.nm{font-weight:800;text-align:center;white-space:nowrap;min-width:64px;cursor:pointer}
+.pl input,.pl select{width:100%;border:1px solid transparent;background:transparent;padding:6px 6px;border-radius:7px;font:inherit;font-size:13.5px;color:inherit}
+.pl input:hover,.pl select:hover{border-color:#dfe4ec}
+.pl input:focus,.pl select:focus{outline:none;border-color:var(--brand);background:#fff}
+.pl .sc input{text-align:center;width:58px}
+.pl .sc .auto{color:#16a34a;font-weight:800}
+.st-요청{background:#fff4df!important;color:#b45309;font-weight:800}
+.st-완료{background:#e8f8ee!important;color:#15803d;font-weight:800}
+.fmtwrap{position:relative}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin:2px 0 0}
+.chips b{font-size:11.5px;font-weight:700;background:#eef2ff;color:var(--brand);border-radius:999px;padding:2px 8px;cursor:pointer}
+.res{font-size:12.5px;color:#334155;white-space:nowrap}
+.res a{color:var(--brand);font-weight:700}
+.del{color:#dc2626;font-size:12px;cursor:pointer;margin-left:6px}
+.saved{position:fixed;right:14px;bottom:14px;background:#111827;color:#fff;border-radius:999px;padding:7px 14px;font-size:13px;opacity:0;transition:.2s}
+.saved.on{opacity:.9}
+.req{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:10px 0}
+.req h3{margin:0 0 6px;font-size:15px}
+.req li{font-size:13.5px;margin:3px 0}
+@media print{.top,.bar,.chips,.del,.noprint,.saved{display:none!important}.tw{border:0}table.pl{min-width:0;font-size:11px}.pl input,.pl select{border:0;padding:2px}body{background:#fff}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="saved" id="saved">저장됨</div>
+<script src="config.js"></script>
+<script>
+const $=s=>document.querySelector(s);const app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fb={url:p=>`${CONFIG.dbUrl}/weekly/${p}.json`,get:p=>fetch(fb.url(p)).then(r=>r.json()),
+ patch:(p,v)=>fetch(fb.url(p),{method:'PATCH',body:JSON.stringify(v)}).then(r=>r.json()),
+ put:(p,v)=>fetch(fb.url(p),{method:'PUT',body:JSON.stringify(v)}).then(r=>r.json()),
+ del:p=>fetch(fb.url(p),{method:'DELETE'}).then(r=>r.json())};
+const PRESETS=['단어10·문법10·배열5','단어10·문법20·독해20','단어20·문법20','단어10·문법20·대화10·독해20·기출10','본문빈칸','단어30'];
+const P={classes:{},week:null,data:{},prev:{},sets:{},results:{}};
+const pad=n=>String(n).padStart(2,'0');
+function monday(d){d=new Date(d);const k=(d.getDay()+6)%7;d.setDate(d.getDate()-k);d.setHours(0,0,0,0);return d;}
+const key=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+function label(d){const e=new Date(d);e.setDate(e.getDate()+6);const nth=Math.floor((d.getDate()-1)/7)+1;return `${d.getMonth()+1}월 ${nth}주차 <span class="muted" style="font-size:14px">(${d.getMonth()+1}/${d.getDate()}~${e.getMonth()+1}/${e.getDate()})</span>`;}
+let saveT;function flash(){const s=$('#saved');s.classList.add('on');clearTimeout(saveT);saveT=setTimeout(()=>s.classList.remove('on'),900);}
+
+function gate(){
+  if(sessionStorage.getItem('weekly_admin')==='1')return main();
+  app.innerHTML=`<header class="top"><div class="brand">TERRY'S <span>WEEKLY</span> · 주간테스트 기록표</div></header>
+  <div class="center card" style="max-width:360px;margin:40px auto;padding:20px"><label class="lbl">관리자 PIN</label><input id="pin" class="inp" type="password" inputmode="numeric"><button class="btn" style="margin-top:10px;width:100%" onclick="chk()">입장</button></div>`;
+  $('#pin').focus();$('#pin').addEventListener('keydown',e=>{if(e.key==='Enter')chk();});
+}
+function chk(){if($('#pin').value===CONFIG.adminPin){sessionStorage.setItem('weekly_admin','1');main();}else $('#pin').classList.add('err');}
+
+async function main(){
+  const q=new URLSearchParams(location.search).get('w');
+  P.week=q?monday(q+'T00:00:00'):monday(new Date());
+  app.innerHTML=`<header class="top"><div class="brand">TERRY'S <span>WEEKLY</span> · 주간테스트 기록표</div><a class="who" href="admin">관리자 ↗</a></header><div class="wrap" id="w"><div class="spinner"></div></div>`;
+  [P.classes,P.sets]=await Promise.all([fb.get('plan/classes'),fb.get('setsMeta')]);P.classes=P.classes||{};P.sets=P.sets||{};
+  await loadWeek();
+}
+async function loadWeek(){
+  const k=key(P.week);const pv=new Date(P.week);pv.setDate(pv.getDate()-7);
+  [P.data,P.prev]=await Promise.all([fb.get(`plan/weeks/${k}`),fb.get(`plan/weeks/${key(pv)}`)]);P.data=P.data||{};P.prev=P.prev||{};
+  history.replaceState(null,'',`?w=${k}`);
+  const ids=[...new Set(Object.values(P.data).map(r=>r&&r.setId).filter(Boolean))];
+  P.results={};await Promise.all(ids.map(async id=>{try{P.results[id]=(await fb.get(`results/${id}`))||{};}catch(e){}}));
+  render();
+}
+function shift(n){P.week.setDate(P.week.getDate()+7*n);loadWeek();}
+const classList=()=>Object.entries(P.classes).sort((a,b)=>(a[1].order??0)-(b[1].order??0));
+const studs=c=>Object.entries(c.students||{}).sort((a,b)=>(a[1].order??0)-(b[1].order??0)||a[1].name.localeCompare(b[1].name,'ko'));
+function autoScore(r,name){
+  if(!r||!r.setId)return null;const res=P.results[r.setId];if(!res)return null;
+  const mine=Object.values(res).filter(x=>x&&x.name&&x.name.replace(/\s/g,'')===name.replace(/\s/g,'')).sort((a,b)=>(b.lastAt||'').localeCompare(a.lastAt||''))[0];
+  if(!mine||!mine.sections)return mine?{done:mine.done}:null;
+  const out={done:mine.done,total:mine.total,max:mine.totalMax};
+  for(const [sid,s] of Object.entries(mine.sections)){const t=(sid+' ').toLowerCase();
+    const k=/voca|단어|w-/.test(t)?'w':/gram|문법/.test(t)?'g':'r';
+    out[k]=out[k]||{s:0,t:0};out[k].s+=s.score||0;out[k].t+=s.total||0;}
+  return out;
+}
+function render(){
+  const cl=classList();const all=cl.flatMap(([cid,c])=>studs(c).map(([sid,s])=>({cid,sid,s,r:P.data[sid]||{}})));
+  const nReq=all.filter(x=>x.r.status==='요청').length,nDone=all.filter(x=>x.r.status==='완료').length,nNone=all.length-nReq-nDone;
+  const reqs=all.filter(x=>x.r.status==='요청');
+  $('#w').innerHTML=`
+  <div class="bar"><button class="btn sm gray" onclick="shift(-1)">◀ 지난주</button><div class="wk">${label(P.week)}</div><button class="btn sm gray" onclick="shift(1)">다음주 ▶</button>
+   <span style="flex:1"></span>
+   <button class="btn sm line" onclick="copyPrev()">지난주 교재·형태 복사</button>
+   <button class="btn sm line" onclick="addClass()">+ 반 추가</button>
+   <button class="btn sm gray" onclick="window.print()">인쇄</button></div>
+  <div class="sum"><span>전체 ${all.length}명</span><span style="color:#b45309">요청 ${nReq}</span><span style="color:#15803d">완료 ${nDone}</span><span class="muted">미요청 ${nNone}</span></div>
+  ${reqs.length?`<div class="req noprint"><h3>📮 제작 요청 ${reqs.length}건 <span class="muted small">— Claude에게 "주간테스트 만들어"라고 하면 이 목록대로 만들어요</span></h3><ul style="margin:0;padding-left:18px">${reqs.map(x=>`<li><b>${esc(x.s.name)}</b> · ${esc(x.r.book||'교재?')} ${esc(x.r.range||'')} · ${esc(x.r.format||'형태?')}${x.r.memo?` · <span class="muted">${esc(x.r.memo)}</span>`:''}</li>`).join('')}</ul></div>`:''}
+  ${cl.length?cl.map(([cid,c])=>classTable(cid,c)).join(''):'<p class="muted">반이 없어요. [+ 반 추가]로 시작하세요.</p>'}
+  <datalist id="books">${[...new Set([...Object.values(P.data),...Object.values(P.prev)].map(r=>r&&r.book).filter(Boolean))].map(b=>`<option value="${esc(b)}">`).join('')}</datalist>`;
+}
+function classTable(cid,c){
+  const setOpts=Object.entries(P.sets).sort((a,b)=>(b[1].createdAt||'').localeCompare(a[1].createdAt||'')).map(([id,m])=>`<option value="${esc(id)}">${esc(m.title||id)}</option>`).join('');
+  return `<div class="cls"><h2>${esc(c.name)} <span class="muted small">— ${studs(c).length}명</span></h2>
+   <span class="noprint"><button class="btn sm gray" onclick="addStud('${cid}')">+ 학생</button> <span class="del" onclick="renClass('${cid}')">이름변경</span><span class="del" onclick="delClass('${cid}')">반 삭제</span></span></div>
+  <div class="tw"><table class="pl"><thead><tr><th>이름</th><th>교재</th><th>진도(범위)</th><th>테스트 형태</th><th>상태</th><th>시험지</th><th>단어</th><th>문법</th><th>리딩</th><th>메모</th></tr></thead><tbody>
+  ${studs(c).map(([sid,s])=>{const r=P.data[sid]||{};const a=autoScore(r,s.name);
+   const sc=k=>{const v=r[k]??'';const au=a&&a[k]?`${a[k].s}/${a[k].t}`:'';return `<td class="sc">${v===''&&au?`<span class="auto" title="weekly 자동 채점">${au}</span>`:`<input value="${esc(v)}" placeholder="${esc(au)}" onchange="upd('${sid}','${k}',this.value)">`}</td>`;};
+   return `<tr><td class="nm" title="클릭: 이름 변경/삭제" onclick="studMenu('${cid}','${sid}')">${esc(s.name)}</td>
+    <td style="min-width:150px"><input list="books" value="${esc(r.book)}" placeholder="교재명" onchange="upd('${sid}','book',this.value)"></td>
+    <td style="min-width:110px"><input value="${esc(r.range)}" placeholder="예: 7과 / Unit 3" onchange="upd('${sid}','range',this.value)"></td>
+    <td style="min-width:190px"><input id="f-${sid}" value="${esc(r.format)}" placeholder="예: 단어10·문법10·배열5" onchange="upd('${sid}','format',this.value)">${r.format?'':`<div class="chips noprint">${PRESETS.slice(0,3).map(p=>`<b onclick="setFmt('${sid}','${p}')">${p}</b>`).join('')}</div>`}</td>
+    <td style="min-width:84px"><select class="${r.status?'st-'+r.status:''}" onchange="upd('${sid}','status',this.value);this.className=this.value?'st-'+this.value:''"><option value="">미요청</option><option ${r.status==='요청'?'selected':''}>요청</option><option ${r.status==='완료'?'selected':''}>완료</option></select></td>
+    <td style="min-width:170px"><select onchange="upd('${sid}','setId',this.value,true)"><option value="">—</option>${setOpts.replace(`value="${esc(r.setId||'')}"`,`value="${esc(r.setId||'')}" selected`)}</select>${r.setId?`<div class="res"><a href="./?s=${encodeURIComponent(r.setId)}" target="_blank">학생 링크</a>${a&&a.max?` · 총 ${a.total}/${a.max}${a.done?'':' (푸는 중)'}`:a?'':' · 아직 안 풂'}</div>`:''}</td>
+    ${sc('w')}${sc('g')}${sc('r')}
+    <td style="min-width:120px"><input value="${esc(r.memo)}" onchange="upd('${sid}','memo',this.value)"></td></tr>`;}).join('')}
+  </tbody></table></div>`;
+}
+async function upd(sid,k,v,re){P.data[sid]=P.data[sid]||{};P.data[sid][k]=v;await fb.patch(`plan/weeks/${key(P.week)}/${sid}`,{[k]:v,updatedAt:new Date().toISOString()});flash();
+  if(re){if(v&&!P.results[v])P.results[v]=(await fb.get(`results/${v}`))||{};render();}}
+function setFmt(sid,p){const el=$('#f-'+sid);el.value=p;upd(sid,'format',p);}
+async function copyPrev(){let n=0;const up={};for(const [sid,r] of Object.entries(P.prev)){if(!r)continue;const cur=P.data[sid]||{};if(cur.book||cur.format)continue;
+  up[sid]={book:r.book||'',range:r.range||'',format:r.format||''};n++;}
+  if(!n)return alert('복사할 게 없어요 (이미 채워져 있거나 지난주 기록 없음)');
+  if(!confirm(`지난주 교재·진도·형태를 ${n}명에게 복사할까요? (진도는 바꿔 주세요)`))return;
+  for(const [sid,v] of Object.entries(up)){P.data[sid]={...(P.data[sid]||{}),...v};await fb.patch(`plan/weeks/${key(P.week)}/${sid}`,v);}flash();render();}
+const nid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+async function addClass(){const name=prompt('반 이름 (예: 월수반 (월·수·금))');if(!name)return;const id=nid();P.classes[id]={name,order:Object.keys(P.classes).length,students:{}};await fb.put(`plan/classes/${id}`,P.classes[id]);render();}
+async function renClass(cid){const n=prompt('반 이름',P.classes[cid].name);if(!n)return;P.classes[cid].name=n;await fb.patch(`plan/classes/${cid}`,{name:n});render();}
+async function delClass(cid){if(!confirm(`'${P.classes[cid].name}' 반을 삭제할까요? (학생 기록은 남아요)`))return;delete P.classes[cid];await fb.del(`plan/classes/${cid}`);render();}
+async function addStud(cid){const t=prompt('학생 이름 (여러 명은 쉼표로)');if(!t)return;const c=P.classes[cid];c.students=c.students||{};let o=Object.keys(c.students).length;
+  for(const name of t.split(/[,\n]/).map(x=>x.trim()).filter(Boolean)){const id='s'+nid();c.students[id]={name,order:o++};await fb.put(`plan/classes/${cid}/students/${id}`,c.students[id]);}render();}
+async function studMenu(cid,sid){const s=P.classes[cid].students[sid];const n=prompt(`'${s.name}' 이름 변경 (지우려면 '삭제' 입력)`,s.name);if(n===null)return;
+  if(n.trim()==='삭제'){if(!confirm(`${s.name} 학생을 명단에서 뺄까요?`))return;delete P.classes[cid].students[sid];await fb.del(`plan/classes/${cid}/students/${sid}`);}
+  else if(n.trim()){s.name=n.trim();await fb.patch(`plan/classes/${cid}/students/${sid}`,{name:s.name});}render();}
+gate();
+</script>
+</body>
+</html>
